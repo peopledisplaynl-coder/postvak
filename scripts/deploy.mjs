@@ -2,20 +2,27 @@
 /**
  * Deploy Postvak to shared hosting over FTP(S).
  *
- *   npm run deploy                 build frontend + upload everything (except config.php)
- *   npm run deploy -- --skip-vendor     skip the (large) vendor folder when dependencies did not change
- *   npm run deploy -- --with-config     also upload backend/config/config.php (first install)
- *   npm run deploy -- --dry-run         show what would be uploaded
+ *   npm run deploy                     build frontend + upload what changed (never config.php)
+ *   npm run deploy -- --with-config    also upload backend/config/config.php (first install / config change)
+ *   npm run deploy -- --dry-run        show what would be uploaded, upload nothing
+ *   npm run deploy -- --full           ignore the upload log and upload everything again
+ *   npm run deploy -- --skip-build     do not rebuild the frontend
  *
  * Settings come from .env.deploy in the project root (see .env.deploy.example).
  *
+ * The script remembers what it uploaded in .deploy-state.json, so:
+ *  - a deploy that was interrupted can simply be started again and continues where it stopped;
+ *  - later deploys only upload files that changed.
+ * Dropped FTP connections (common on shared hosting) are retried automatically.
+ *
  * Remote layout:
  *   REMOTE_WEBROOT  <- backend/public   (index.html, assets, api/index.php, .htaccess)
- *   REMOTE_APPDIR   <- backend/{bootstrap.php, routes.php, src, vendor, storage, config}
+ *   REMOTE_APPDIR   <- backend/{bootstrap.php, routes.php, src, database, vendor, storage, config}
  * REMOTE_APPDIR should be OUTSIDE the web root.
  */
 import { Client } from 'basic-ftp'
 import { execSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdtempSync } from 'node:fs'
 import { join, posix, relative } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -24,71 +31,121 @@ import { fileURLToPath } from 'node:url'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const args = new Set(process.argv.slice(2))
 const dry = args.has('--dry-run')
+const backend = join(root, 'backend')
+const stateFile = join(root, '.deploy-state.json')
+
+// ---------------------------------------------------------------- settings
 
 function loadEnv() {
   const file = join(root, '.env.deploy')
-  if (!existsSync(file)) {
-    console.error('Missing .env.deploy. Copy .env.deploy.example and fill it in.')
-    process.exit(1)
-  }
+  if (!existsSync(file)) fail('Missing .env.deploy. Copy .env.deploy.example and fill it in.')
   const env = {}
   for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*)\s*$/)
-    if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, '')
+    const m = line.match(/^\s*([A-Z_]+)\s*=(.*)$/)
+    if (m) env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '').trim()
   }
   for (const key of ['FTP_HOST', 'FTP_USER', 'FTP_PASSWORD', 'REMOTE_WEBROOT', 'REMOTE_APPDIR']) {
-    if (!env[key]) {
-      console.error(`.env.deploy: ${key} is required`)
-      process.exit(1)
-    }
+    if (!env[key]) fail(`.env.deploy: ${key} is required`)
+  }
+  for (const key of ['REMOTE_WEBROOT', 'REMOTE_APPDIR']) {
+    env[key] = '/' + env[key].replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+    if (/\s/.test(env[key])) fail(`.env.deploy: ${key} contains a space: "${env[key]}"`)
+  }
+  if (env.REMOTE_APPDIR.startsWith(env.REMOTE_WEBROOT + '/')) {
+    console.warn('! REMOTE_APPDIR is inside REMOTE_WEBROOT. It is protected by .htaccess, but outside is safer.')
   }
   return env
 }
 
-const env = loadEnv()
-const backend = join(root, 'backend')
+function fail(message) {
+  console.error(message)
+  process.exit(1)
+}
 
-// 1. Build the frontend into backend/public
+const env = loadEnv()
+
+// ------------------------------------------------------------------- build
+
 if (!args.has('--skip-build')) {
   console.log('› Building frontend…')
   execSync('npm run build', { cwd: join(root, 'frontend'), stdio: 'inherit' })
 }
-
 if (!existsSync(join(backend, 'vendor', 'autoload.php'))) {
-  console.error('backend/vendor is missing. Run "composer install --no-dev" in the backend folder first.')
-  process.exit(1)
+  fail('backend/vendor is missing. Run "composer install --no-dev" in the backend folder first.')
 }
 if (args.has('--with-config') && !existsSync(join(backend, 'config', 'config.php'))) {
-  console.error('backend/config/config.php does not exist yet.')
-  process.exit(1)
+  fail('backend/config/config.php does not exist yet.')
 }
 
-// 2. Tell api/index.php where the app folder is, relative to the web root.
+// api/index.php needs to know where the app folder is, relative to the web root.
 const relApp = posix.relative(posix.join(env.REMOTE_WEBROOT, 'api'), env.REMOTE_APPDIR)
 const tmp = mkdtempSync(join(tmpdir(), 'postvak-'))
 const appPathFile = join(tmp, 'app-path.php')
 writeFileSync(appPathFile, `<?php\n// Generated by scripts/deploy.mjs\nreturn __DIR__ . '/${relApp}';\n`)
 
-// 3. Upload
-const client = new Client(30000)
-client.ftp.verbose = false
+// ----------------------------------------------------------- file selection
 
-async function uploadDir(local, remote, skip = () => false) {
-  for (const name of readdirSync(local)) {
-    const l = join(local, name)
-    const r = posix.join(remote, name)
-    if (skip(relative(backend, l).replaceAll('\\', '/'), name)) continue
-    if (statSync(l).isDirectory()) {
-      if (!dry) await client.ensureDir(r)
-      await uploadDir(l, r, skip)
-    } else {
-      console.log(`  ${dry ? '(dry) ' : ''}${r}`)
-      if (!dry) await client.uploadFrom(l, r)
-    }
+// Files in vendor that are never needed on the server.
+const VENDOR_SKIP = /(^|\/)(tests?|docs?|examples?|\.github|\.git|bin)(\/|$)|\.(md|dist|yml|yaml|neon|xml)$|(^|\/)(LICENSE|CHANGELOG|UPGRADE|CONTRIBUTING|phpunit|phpstan|psalm)[^/]*$/i
+
+/** @returns {Array<{local: string, remote: string}>} */
+function collect(localDir, remoteDir, skip = () => false) {
+  const out = []
+  for (const name of readdirSync(localDir)) {
+    const l = join(localDir, name)
+    const rel = relative(backend, l).replaceAll('\\', '/')
+    if (skip(rel)) continue
+    if (statSync(l).isDirectory()) out.push(...collect(l, posix.join(remoteDir, name), skip))
+    else out.push({ local: l, remote: posix.join(remoteDir, name) })
   }
+  return out
 }
 
+const files = [
+  ...collect(join(backend, 'public'), env.REMOTE_WEBROOT, (rel) => rel === 'public/api/app-path.php'),
+  { local: appPathFile, remote: posix.join(env.REMOTE_WEBROOT, 'api', 'app-path.php') },
+  ...['bootstrap.php', 'routes.php', '.htaccess'].map((f) => ({ local: join(backend, f), remote: posix.join(env.REMOTE_APPDIR, f) })),
+  ...collect(join(backend, 'src'), posix.join(env.REMOTE_APPDIR, 'src')),
+  ...collect(join(backend, 'database'), posix.join(env.REMOTE_APPDIR, 'database')),
+  ...collect(join(backend, 'vendor'), posix.join(env.REMOTE_APPDIR, 'vendor'), (rel) => VENDOR_SKIP.test(rel.slice('vendor/'.length))),
+  { local: join(backend, 'storage', '.htaccess'), remote: posix.join(env.REMOTE_APPDIR, 'storage', '.htaccess') },
+  ...(args.has('--with-config') ? [{ local: join(backend, 'config', 'config.php'), remote: posix.join(env.REMOTE_APPDIR, 'config', 'config.php'), always: true }] : []),
+]
+
+// Only upload what changed since the last successful upload of that file.
+const target = `${env.FTP_HOST}|${env.REMOTE_WEBROOT}|${env.REMOTE_APPDIR}`
+let state = {}
 try {
+  const saved = JSON.parse(readFileSync(stateFile, 'utf8'))
+  if (saved.target === target && !args.has('--full')) state = saved.files ?? {}
+} catch {}
+
+const hash = (file) => createHash('sha1').update(readFileSync(file)).digest('hex')
+for (const f of files) f.hash = hash(f.local)
+const todo = files.filter((f) => f.always || state[f.remote] !== f.hash)
+
+console.log(`› ${todo.length} of ${files.length} files to upload`)
+console.log(`  web root: ${env.REMOTE_WEBROOT}`)
+console.log(`  app:      ${env.REMOTE_APPDIR}`)
+
+if (dry) {
+  for (const f of todo.slice(0, 40)) console.log(`  (dry) ${f.remote}`)
+  if (todo.length > 40) console.log(`  (dry) … and ${todo.length - 40} more`)
+  console.log('✓ Dry run finished, nothing was uploaded')
+  process.exit(0)
+}
+if (todo.length === 0) {
+  console.log('✓ Everything is up to date')
+  process.exit(0)
+}
+
+// ------------------------------------------------------------------ upload
+
+const client = new Client(60000)
+const madeDirs = new Set()
+
+async function connect() {
+  client.close()
   await client.access({
     host: env.FTP_HOST,
     port: Number(env.FTP_PORT || 21),
@@ -96,35 +153,51 @@ try {
     password: env.FTP_PASSWORD,
     secure: env.FTP_SECURE !== 'false', // explicit FTPS by default
   })
+  madeDirs.clear()
+}
 
-  console.log(`› Web root → ${env.REMOTE_WEBROOT}`)
-  if (!dry) await client.ensureDir(env.REMOTE_WEBROOT)
-  await uploadDir(join(backend, 'public'), env.REMOTE_WEBROOT)
-  if (!dry) await client.uploadFrom(appPathFile, posix.join(env.REMOTE_WEBROOT, 'api', 'app-path.php'))
+async function ensureDir(dir) {
+  if (madeDirs.has(dir)) return
+  await client.ensureDir(dir)
+  madeDirs.add(dir)
+}
 
-  console.log(`› App → ${env.REMOTE_APPDIR}`)
-  if (!dry) await client.ensureDir(env.REMOTE_APPDIR)
-  for (const file of ['bootstrap.php', 'routes.php', '.htaccess']) {
-    console.log(`  ${posix.join(env.REMOTE_APPDIR, file)}`)
-    if (!dry) await client.uploadFrom(join(backend, file), posix.join(env.REMOTE_APPDIR, file))
+function saveState() {
+  writeFileSync(stateFile, JSON.stringify({ target, files: state }, null, 1))
+}
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+
+try {
+  await connect()
+  let done = 0
+  for (const f of todo) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await ensureDir(posix.dirname(f.remote))
+        await client.uploadFrom(f.local, f.remote)
+        break
+      } catch (e) {
+        if (attempt >= 5) throw new Error(`${f.remote}: ${e.message}`)
+        process.stdout.write(`\n  connection lost (${e.code || e.message}), reconnecting… `)
+        await wait(2000 * attempt)
+        await connect()
+      }
+    }
+    if (f.local !== appPathFile) state[f.remote] = f.hash
+    done++
+    if (done % 25 === 0 || done === todo.length) {
+      saveState()
+      process.stdout.write(`\r  uploaded ${done}/${todo.length}   `)
+    }
   }
-  for (const dir of ['src', 'database', ...(args.has('--skip-vendor') ? [] : ['vendor'])]) {
-    if (!dry) await client.ensureDir(posix.join(env.REMOTE_APPDIR, dir))
-    await uploadDir(join(backend, dir), posix.join(env.REMOTE_APPDIR, dir), (rel) => /(^|\/)(tests?|docs?|\.git)(\/|$)/i.test(rel) && rel.startsWith('vendor/'))
-  }
-  // storage: only the folder and its protection files, never cache contents
-  if (!dry) await client.ensureDir(posix.join(env.REMOTE_APPDIR, 'storage', 'cache'))
-  if (!dry) await client.uploadFrom(join(backend, 'storage', '.htaccess'), posix.join(env.REMOTE_APPDIR, 'storage', '.htaccess'))
-
-  if (args.has('--with-config')) {
-    if (!dry) await client.ensureDir(posix.join(env.REMOTE_APPDIR, 'config'))
-    console.log('  config/config.php')
-    if (!dry) await client.uploadFrom(join(backend, 'config', 'config.php'), posix.join(env.REMOTE_APPDIR, 'config', 'config.php'))
-  }
-
-  console.log('✓ Deployed')
+  // Make sure the cache folder exists (contents are never uploaded).
+  await ensureDir(posix.join(env.REMOTE_APPDIR, 'storage', 'cache'))
+  console.log('\n✓ Deployed')
 } catch (e) {
-  console.error('Deploy failed:', e.message)
+  saveState()
+  console.error(`\nDeploy failed: ${e.message}`)
+  console.error('Run the same command again: it continues where it stopped.')
   process.exitCode = 1
 } finally {
   client.close()

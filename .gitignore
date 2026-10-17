@@ -27,3 +27,4 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 *.log
+.deploy-state.json

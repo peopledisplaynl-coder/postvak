@@ -1,0 +1,6 @@
+# The application folder must never be served directly.
+# (Only relevant if your host forces you to place it inside the web root.)
+Require all denied
+<IfModule !mod_authz_core.c>
+    Deny from all
+</IfModule>

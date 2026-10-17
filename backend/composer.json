@@ -1,0 +1,18 @@
+{
+  "name": "postvak/backend",
+  "description": "Postvak webmail - PHP API",
+  "type": "project",
+  "license": "MIT",
+  "require": {
+    "php": ">=8.2",
+    "ext-mbstring": "*",
+    "ext-openssl": "*",
+    "ext-pdo": "*",
+    "ext-sodium": "*",
+    "webklex/php-imap": "^6.0",
+    "phpmailer/phpmailer": "^6.9",
+    "ezyang/htmlpurifier": "^4.17"
+  },
+  "autoload": { "psr-4": { "Postvak\\": "src/" } },
+  "config": { "optimize-autoloader": true, "sort-packages": true, "platform": { "php": "8.2.0" } }
+}

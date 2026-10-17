@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, openssl, sodium, pdo_mysql, zip, fileinfo
+      - run: composer install --no-interaction --working-dir=backend
+      - name: Lint PHP
+        run: find backend -name '*.php' -not -path '*/vendor/*' -print0 | xargs -0 -n1 php -l
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix frontend

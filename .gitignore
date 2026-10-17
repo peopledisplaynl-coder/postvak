@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+backend/vendor/
+
+# Secrets
+.env.deploy
+backend/config/config.php
+
+# Build output (generated into backend/public by "npm run build")
+backend/public/index.html
+backend/public/assets/
+backend/public/sw.js
+backend/public/workbox-*.js
+backend/public/registerSW.js
+backend/public/manifest.webmanifest
+backend/public/icon*.png
+backend/public/icon.svg
+backend/public/api/app-path.php
+
+# Runtime
+backend/storage/cache/*
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log

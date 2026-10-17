@@ -1,0 +1,70 @@
+<script setup>
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useSession } from '../stores/session.js'
+import { t } from '../i18n/index.js'
+
+const session = useSession()
+const router = useRouter()
+
+const email = ref('')
+const password = ref('')
+const advanced = ref(false)
+const server = ref({ imap_host: '', imap_port: '', smtp_host: '', smtp_port: '' })
+const busy = ref(false)
+const error = ref('')
+
+async function submit() {
+  error.value = ''
+  busy.value = true
+  try {
+    await session.login({ email: email.value, password: password.value, ...(advanced.value ? server.value : {}) })
+    router.replace('/')
+  } catch (e) {
+    error.value = e.status === 0 ? t('errors.offline') : e.message
+  } finally {
+    busy.value = false
+  }
+}
+</script>
+
+<template>
+  <main class="pt-safe pb-safe flex min-h-full items-center justify-center p-5">
+    <form class="w-full max-w-sm" @submit.prevent="submit">
+      <img src="/icon.svg" alt="" class="mb-6 size-14" />
+      <h1 class="text-3xl font-semibold tracking-tight">{{ t('appName') }}</h1>
+      <p class="mt-2 text-muted">{{ t('login.intro') }}</p>
+
+      <label class="mt-8 block text-sm font-medium" for="email">{{ t('login.email') }}</label>
+      <input
+        id="email" v-model="email" type="email" autocomplete="username" required
+        class="mt-1.5 w-full rounded-xl border border-line bg-surface px-4 py-3 outline-none focus:border-accent"
+      />
+
+      <label class="mt-4 block text-sm font-medium" for="password">{{ t('login.password') }}</label>
+      <input
+        id="password" v-model="password" type="password" autocomplete="current-password" required
+        class="mt-1.5 w-full rounded-xl border border-line bg-surface px-4 py-3 outline-none focus:border-accent"
+      />
+
+      <button type="button" class="mt-3 text-sm text-muted hover:text-ink" @click="advanced = !advanced">
+        {{ t('login.advanced') }}
+      </button>
+      <div v-if="advanced" class="mt-3 grid grid-cols-[1fr_6rem] gap-2 text-sm">
+        <p class="col-span-2 text-muted">{{ t('login.advancedHint') }}</p>
+        <input v-model="server.imap_host" placeholder="IMAP-server" class="rounded-lg border border-line bg-surface px-3 py-2" />
+        <input v-model="server.imap_port" placeholder="993" inputmode="numeric" class="rounded-lg border border-line bg-surface px-3 py-2" />
+        <input v-model="server.smtp_host" placeholder="SMTP-server" class="rounded-lg border border-line bg-surface px-3 py-2" />
+        <input v-model="server.smtp_port" placeholder="465" inputmode="numeric" class="rounded-lg border border-line bg-surface px-3 py-2" />
+      </div>
+
+      <p v-if="error" class="mt-4 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">{{ error }}</p>
+
+      <button
+        type="submit"
+        :disabled="busy"
+        class="mt-6 w-full rounded-xl bg-accent px-4 py-3 font-medium text-white transition hover:brightness-110 disabled:opacity-60"
+      >{{ busy ? t('login.busy') : t('login.submit') }}</button>
+    </form>
+  </main>
+</template>

@@ -1,0 +1,26 @@
+{
+  "name": "postvak-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:mock": "vite --mode mock",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fontsource-variable/instrument-sans": "^5.3.0",
+    "dompurify": "^3.4.17",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.44",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "tailwindcss": "^4.3.3",
+    "vite": "^6.4.4",
+    "vite-plugin-pwa": "^2.0.0"
+  }
+}

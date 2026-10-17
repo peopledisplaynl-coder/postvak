@@ -1,0 +1,38 @@
+# Postvak - web root (.htaccess for Apache / LiteSpeed)
+
+Options -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Force HTTPS
+    RewriteCond %{HTTPS} off
+    RewriteCond %{HTTP:X-Forwarded-Proto} !https
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # API: /api/... -> api/index.php
+    RewriteRule ^api/(.*)$ api/index.php [QSA,L]
+
+    # Single-page app: everything that is not a file goes to index.html
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header always set Strict-Transport-Security "max-age=31536000"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "no-referrer"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    # Mail content is rendered in a sandboxed iframe via srcdoc; remote images only when the user allows them.
+    Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self' about:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
+    # Built assets have a hash in their name: cache them for a long time.
+    <FilesMatch "\.(js|css|woff2|svg|png|webp)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    <FilesMatch "^(index\.html|sw\.js|manifest\.webmanifest)$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>

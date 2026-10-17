@@ -1,10 +1,11 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
 import AccountForm from '../components/AccountForm.vue'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
+import { api } from '../api/client.js'
 import { t } from '../i18n/index.js'
 
 const route = useRoute()
@@ -12,7 +13,7 @@ const router = useRouter()
 const session = useSession()
 const toasts = useToasts()
 
-const tabs = ['general', 'swipe', 'accounts']
+const tabs = ['general', 'swipe', 'privacy', 'accounts']
 const tab = computed(() => (tabs.includes(route.params.tab) ? route.params.tab : 'general'))
 const editing = ref(null) // account id, 'new' or null
 
@@ -36,6 +37,40 @@ async function remove(account) {
   }
 }
 
+// ---- safe senders
+const trusted = ref([])
+const trustedInput = ref('')
+
+async function loadTrusted() {
+  try {
+    trusted.value = await api.get('/trusted-senders')
+  } catch (e) {
+    toasts.error(t('toast.failed', { msg: e.message }))
+  }
+}
+watch(tab, (name) => name === 'privacy' && loadTrusted(), { immediate: true })
+
+async function addTrusted() {
+  const value = trustedInput.value.trim().toLowerCase().replace(/^@/, '')
+  const kind = value.includes('@') ? 'email' : 'domain'
+  try {
+    await api.post('/trusted-senders', { kind, value })
+    trustedInput.value = ''
+    loadTrusted()
+  } catch (e) {
+    toasts.error(t('toast.failed', { msg: e.message }))
+  }
+}
+
+async function removeTrusted(item) {
+  try {
+    await api.del(`/trusted-senders/${item.id}`)
+    trusted.value = trusted.value.filter((x) => x.id !== item.id)
+  } catch (e) {
+    toasts.error(t('toast.failed', { msg: e.message }))
+  }
+}
+
 async function logout() {
   await session.logout()
   router.push('/login')
@@ -53,13 +88,13 @@ const pollOptions = [30, 60, 120, 300, 600]
       <h1 class="text-xl font-semibold">{{ t('settings.title') }}</h1>
     </header>
 
-    <nav class="flex gap-1 px-4" role="tablist">
+    <nav class="flex gap-1 overflow-x-auto px-4" role="tablist">
       <router-link
         v-for="name in tabs"
         :key="name"
         :to="`/settings/${name}`"
         role="tab"
-        class="rounded-full px-4 py-2 text-sm"
+        class="shrink-0 rounded-full px-4 py-2 text-sm"
         :class="tab === name ? 'bg-ink font-medium text-canvas' : 'text-muted hover:bg-sunken'"
       >{{ t(`settings.${name}`) }}</router-link>
     </nav>
@@ -80,14 +115,6 @@ const pollOptions = [30, 60, 120, 300, 600]
           <select :value="session.settings.density" class="rounded-lg bg-sunken px-3 py-1.5" @change="set('density', $event.target.value)">
             <option value="comfortable">{{ t('settings.comfortable') }}</option>
             <option value="compact">{{ t('settings.compact') }}</option>
-          </select>
-        </label>
-        <label class="flex items-center justify-between gap-4 px-4 py-3">
-          <span>{{ t('settings.showImages') }}</span>
-          <select :value="session.settings.show_images" class="rounded-lg bg-sunken px-3 py-1.5" @change="set('show_images', $event.target.value)">
-            <option value="ask">{{ t('settings.imagesAsk') }}</option>
-            <option value="always">{{ t('settings.imagesAlways') }}</option>
-            <option value="never">{{ t('settings.imagesNever') }}</option>
           </select>
         </label>
         <label class="flex items-center justify-between gap-4 px-4 py-3">
@@ -158,6 +185,45 @@ const pollOptions = [30, 60, 120, 300, 600]
             <input type="checkbox" class="size-5 accent-accent" :checked="session.settings.confirm_delete" @change="set('confirm_delete', $event.target.checked)" />
           </label>
         </div>
+      </div>
+
+      <!-- Privacy -->
+      <div v-else-if="tab === 'privacy'" class="space-y-6">
+        <div class="divide-y divide-line rounded-2xl bg-surface ring-1 ring-line">
+        <label class="flex items-center justify-between gap-4 px-4 py-3">
+          <span>{{ t('settings.showImages') }}</span>
+          <select :value="session.settings.show_images" class="rounded-lg bg-sunken px-3 py-1.5" @change="set('show_images', $event.target.value)">
+            <option value="ask">{{ t('settings.imagesAsk') }}</option>
+            <option value="always">{{ t('settings.imagesAlways') }}</option>
+            <option value="never">{{ t('settings.imagesNever') }}</option>
+          </select>
+        </label>
+        </div>
+
+        <section>
+          <h2 class="font-medium">{{ t('settings.trustedTitle') }}</h2>
+          <p class="mt-1 text-sm text-muted">{{ t('settings.trustedIntro') }}</p>
+
+          <form class="mt-3 flex gap-2" @submit.prevent="addTrusted">
+            <input
+              v-model="trustedInput"
+              class="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 outline-none focus:border-accent"
+              :placeholder="t('settings.trustedAddPlaceholder')"
+            />
+            <button class="rounded-lg bg-accent px-4 py-2 font-medium text-white disabled:opacity-60" :disabled="!trustedInput.trim()">
+              {{ t('settings.add') }}
+            </button>
+          </form>
+
+          <ul v-if="trusted.length" class="mt-3 divide-y divide-line rounded-2xl bg-surface ring-1 ring-line">
+            <li v-for="item in trusted" :key="item.id" class="flex items-center gap-3 px-4 py-2.5">
+              <span class="min-w-0 flex-1 truncate">{{ item.kind === 'domain' ? '@' + item.value : item.value }}</span>
+              <span v-if="item.kind === 'domain'" class="rounded-full bg-sunken px-2 py-0.5 text-xs text-muted">{{ t('settings.trustedDomainLabel') }}</span>
+              <button class="rounded-lg px-2 py-1 text-sm text-danger hover:bg-danger/10" @click="removeTrusted(item)">{{ t('settings.remove') }}</button>
+            </li>
+          </ul>
+          <p v-else class="mt-3 text-sm text-muted">{{ t('settings.trustedEmpty') }}</p>
+        </section>
       </div>
 
       <!-- Accounts -->

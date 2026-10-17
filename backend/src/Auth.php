@@ -68,6 +68,35 @@ final class Auth
         if ($id === null) {
             throw HttpException::unauthorized();
         }
+        // A user blocked by an admin is logged out on the next request.
+        $user = Database::one('SELECT * FROM users WHERE id = ?', [$id]);
+        if ($user === null || !empty($user['blocked'])) {
+            self::logout();
+            throw HttpException::unauthorized($user === null ? 'Not logged in' : 'This account has been blocked');
+        }
+        return $id;
+    }
+
+    /**
+     * Admins are listed by address in config.php ('admins' => ['you@example.com']).
+     * When that list is empty, the first user ever (id 1) is the admin.
+     */
+    public static function isAdmin(int $userId): bool
+    {
+        $admins = array_map('strtolower', (array) Config::get('admins', []));
+        if ($admins === []) {
+            return $userId === 1;
+        }
+        $user = Database::one('SELECT login_email FROM users WHERE id = ?', [$userId]);
+        return $user !== null && in_array(strtolower($user['login_email']), $admins, true);
+    }
+
+    public static function requireAdmin(): int
+    {
+        $id = self::requireUser();
+        if (!self::isAdmin($id)) {
+            throw HttpException::forbidden('Admins only');
+        }
         return $id;
     }
 

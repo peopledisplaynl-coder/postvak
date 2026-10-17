@@ -13,6 +13,7 @@ use Postvak\Mail\ImapService;
 use Postvak\Mail\MessageSanitizer;
 use Postvak\Mail\SmtpService;
 use Postvak\Repositories\AccountRepository;
+use Postvak\Repositories\TrustedSenderRepository;
 use Throwable;
 use Webklex\PHPIMAP\Message;
 
@@ -53,7 +54,12 @@ final class MailController
         $uid = $r->intParam('uid');
         $message = $imap->getMessage($folder, $uid);
 
-        Response::json($this->present($account, $folder, $uid, $message, (bool) $r->query('images', false)));
+        // Remote images: asked for this once, or the sender is on the user's safe list.
+        $fromEmail = $message->getFrom()->first()->mail ?? null;
+        $trusted = (new TrustedSenderRepository())->isTrusted((int) $account['user_id'], $fromEmail);
+        $data = $this->present($account, $folder, $uid, $message, $trusted || (bool) $r->query('images', false));
+        $data['trusted_sender'] = $trusted;
+        Response::json($data);
     }
 
     /** GET /accounts/{id}/messages/{uid}/attachments/{index}?folder=INBOX&inline=1 */

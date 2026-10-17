@@ -5,7 +5,7 @@ import AppIcon from './AppIcon.vue'
 import { useMail } from '../stores/mail.js'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
-import { attachmentUrl } from '../api/client.js'
+import { api, attachmentUrl } from '../api/client.js'
 import { fullDate, fileSize, displayName, avatarColor, initials } from '../format.js'
 import { t } from '../i18n/index.js'
 
@@ -47,6 +47,24 @@ async function load(images = false) {
   }
 }
 watch(() => props.uid, () => load(), { immediate: true })
+
+// ---- safe senders
+const senderEmail = computed(() => message.value?.from?.email?.toLowerCase() ?? '')
+const senderDomain = computed(() => senderEmail.value.split('@')[1] ?? '')
+const trusting = ref(false)
+
+async function trust(kind, value) {
+  trusting.value = true
+  try {
+    await api.post('/trusted-senders', { kind, value })
+    toasts.show(t(kind === 'email' ? 'reader.trustedSender' : 'reader.trustedDomain', { value }))
+    await load(true)
+  } catch (e) {
+    toasts.error(t('toast.failed', { msg: e.message }))
+  } finally {
+    trusting.value = false
+  }
+}
 
 /**
  * Mail HTML is sanitised on the server and again here, then rendered in an iframe
@@ -141,9 +159,21 @@ watch(srcdoc, () => nextTick(() => (frameHeight.value = 200)))
           </div>
         </div>
 
-        <div v-if="message.blocked_images && session.settings.show_images === 'ask'" class="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-sunken px-4 py-3 text-sm">
-          <span class="text-muted">{{ t('reader.imagesBlocked') }}</span>
-          <button class="font-medium text-accent hover:underline" @click="load(true)">{{ t('reader.showImages') }}</button>
+        <div v-if="message.blocked_images && session.settings.show_images !== 'always'" class="mt-5 rounded-xl bg-sunken px-4 py-3 text-sm">
+          <p class="text-muted">{{ t('reader.imagesBlocked') }}</p>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <button class="rounded-lg bg-surface px-3 py-1.5 font-medium text-accent ring-1 ring-line hover:bg-accent-soft" @click="load(true)">
+              {{ t('reader.showImages') }}
+            </button>
+            <template v-if="senderEmail">
+              <button class="rounded-lg bg-surface px-3 py-1.5 ring-1 ring-line hover:bg-accent-soft" :disabled="trusting" @click="trust('email', senderEmail)">
+                {{ t('reader.trustSender', { email: senderEmail }) }}
+              </button>
+              <button class="rounded-lg bg-surface px-3 py-1.5 ring-1 ring-line hover:bg-accent-soft" :disabled="trusting" @click="trust('domain', senderDomain)">
+                {{ t('reader.trustDomain', { domain: senderDomain }) }}
+              </button>
+            </template>
+          </div>
         </div>
 
         <iframe

@@ -10,6 +10,7 @@ const router = createRouter({
     { path: '/', redirect: () => ({ name: 'mail', params: { accountId: useSession().loginAccount?.id ?? '' } }) },
     { path: '/mail/:accountId?', name: 'mail', component: MailView },
     { path: '/settings/:tab?', name: 'settings', component: () => import('./views/SettingsView.vue') },
+    { path: '/admin/:tab?', name: 'admin', component: () => import('./views/AdminView.vue'), meta: { admin: true } },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
@@ -19,6 +20,7 @@ router.beforeEach(async (to) => {
   if (!session.ready) await session.init()
   if (!to.meta.guest && !session.loggedIn) return { name: 'login' }
   if (to.meta.guest && session.loggedIn) return '/'
+  if (to.meta.admin && !session.user?.is_admin) return '/'
 })
 
 export default router

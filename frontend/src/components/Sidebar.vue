@@ -71,6 +71,15 @@ function go(accountId, path = 'INBOX') {
       </li>
     </ul>
 
+    <router-link
+      v-if="session.user?.is_admin"
+      to="/admin"
+      class="mx-2 mb-1 flex items-center gap-2 rounded-xl px-3 py-2 text-muted hover:bg-sunken hover:text-ink"
+      @click="emit('navigate', null)"
+    >
+      <AppIcon name="shield" :size="19" />
+      {{ t('admin.title') }}
+    </router-link>
     <div class="flex items-center gap-1 border-t border-line px-2 py-2">
       <router-link to="/settings" class="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2 py-2 hover:bg-sunken" @click="emit('navigate', null)">
         <AppIcon name="settings" :size="19" />

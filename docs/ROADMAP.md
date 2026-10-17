@@ -12,7 +12,15 @@
 - [x] Settings: theme, density, images, polling, swipe actions, undo time, accounts
 - [x] Responsive layout (phone / tablet / desktop), dark mode, PWA, keyboard shortcuts
 - [x] FTP deploy script, mock backend for UI development
-- [ ] First test run against a real Cloud86 mailbox (folder namespace, special folders, large mailboxes)
+- [x] First test run against a real Cloud86 mailbox
+
+## Phase 1.5 (v0.2)
+
+- [x] Safe senders: always show remote images from an address or a whole domain
+- [x] Admin page: overview (system, database updates, mail server check), users (block/remove),
+      security (login attempts, release blocks), settings (allowed domains, default preferences)
+- [x] Database updates run automatically at login
+- [x] Tested on a real mailbox at Cloud86 (Dovecot): folder namespace, special folders, sorting
 
 ## Phase 2: comfort
 

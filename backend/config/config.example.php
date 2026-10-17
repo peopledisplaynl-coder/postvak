@@ -54,6 +54,9 @@ return [
         'validate_cert'   => true,
     ],
 
+    // Addresses that may open the admin page. Empty = the first user who ever logged in.
+    'admins' => [],
+
     // Allow mail servers on private/local addresses (127.0.0.1, 192.168.x.x).
     // Keep false on shared hosting; only needed when the mail server runs on your own network.
     'allow_private_hosts' => false,

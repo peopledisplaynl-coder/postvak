@@ -9,7 +9,6 @@ use Throwable;
 use Webklex\PHPIMAP\Client;
 use Webklex\PHPIMAP\ClientManager;
 use Webklex\PHPIMAP\Exceptions\AuthFailedException;
-use Webklex\PHPIMAP\Exceptions\ConnectionFailedException;
 use Webklex\PHPIMAP\Folder;
 use Webklex\PHPIMAP\Header;
 use Webklex\PHPIMAP\IMAP;
@@ -384,12 +383,16 @@ final class ImapService
             $client->connect();
         } catch (AuthFailedException) {
             throw HttpException::unauthorized('Login failed: wrong address or password');
-        } catch (ConnectionFailedException $e) {
-            // Webklex wraps auth errors in ConnectionFailedException in some versions.
-            if (stripos($e->getMessage(), 'auth') !== false || stripos((string) $e->getPrevious()?->getMessage(), 'auth') !== false) {
-                throw HttpException::unauthorized('Login failed: wrong address or password');
+        } catch (Throwable $e) {
+            // Depending on the server and library version a wrong password arrives as
+            // AuthFailedException, ConnectionFailedException or ImapServerErrorException
+            // ("NO [AUTHENTICATIONFAILED]"). Look at the whole exception chain.
+            for ($x = $e; $x !== null; $x = $x->getPrevious()) {
+                if (preg_match('/AUTHENTICATIONFAILED|authentication failed|auth.*fail|invalid credentials|LOGIN failed/i', $x->getMessage())) {
+                    throw HttpException::unauthorized('Login failed: wrong address or password');
+                }
             }
-            error_log('[postvak] IMAP connect failed: ' . $e->getMessage());
+            error_log('[postvak] IMAP connect failed: ' . $e::class . ': ' . $e->getMessage());
             throw HttpException::upstream('Could not connect to the mail server');
         }
     }

@@ -93,9 +93,23 @@ All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` b
 | POST | `/accounts/{id}/flags` | `{folder, uids, seen?, flagged?, answered?}` |
 | POST | `/accounts/{id}/send` | multipart: `payload` (JSON) + `files[]` |
 | GET | `/contacts?q=` | Address autocomplete |
+| GET / POST | `/trusted-senders` | Safe senders: `{kind: email\|domain, value}`; remote images always shown |
+| DELETE | `/trusted-senders/{id}` | Remove a safe sender |
+| GET | `/admin/overview` | Admin: version, PHP, extensions, limits, migrations, mail server reachability, stats |
+| POST | `/admin/migrate` | Admin: apply pending database updates |
+| GET | `/admin/users` · PATCH / DELETE `/admin/users/{id}` | Admin: list, block/unblock (`{blocked}`), remove users |
+| GET | `/admin/security` · POST `/admin/security/release` | Admin: login attempts, current blocks, release (`{ip_key}` / `{email_key}`) |
+| GET / PATCH | `/admin/settings` | Admin: allowed login domains, default user preferences |
 | GET | `/health` | Version check |
+
+## Admin
+
+Admins are listed in `config.php` (`'admins' => ['you@example.com']`); when the list is empty the first
+user (id 1) is the admin. Being admin is never stored in the database, so nobody can promote themselves
+through the app. Blocked users are logged out on their next request.
 
 ## Database
 
 See `backend/database/schema.sql`. Schema changes go into `backend/database/migrations/NNN_name.sql`
-and are recorded in `schema_migrations`.
+and are recorded in `schema_migrations`. There is no command line on shared hosting, so pending
+migrations run automatically at login and can be started from the admin page (`Migrator`).

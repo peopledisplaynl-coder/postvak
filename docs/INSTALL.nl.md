@@ -50,6 +50,9 @@ Vul `config/config.php` in:
   e-mailinstellingen. Is het certificaat van `mail.jouwdomein.nl` niet geldig, gebruik dan de
   servernaam van de host (die staat ook bij de e-mailinstellingen).
 - `allowed_login_domains`: vul je eigen domeinen in, zodat alleen die mailboxen kunnen inloggen.
+  Dit kun je later ook op de beheerpagina aanpassen.
+- `admins`: de adressen die de beheerpagina mogen openen, bijvoorbeeld `['ton@labee.eu']`.
+  Laat je dit leeg, dan is de eerste gebruiker die ooit inlogde de beheerder.
 
 ## 4. Uploaden
 

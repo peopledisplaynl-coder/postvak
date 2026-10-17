@@ -49,7 +49,33 @@ final class SettingsRepository
     {
         $row = Database::one('SELECT settings_json FROM user_settings WHERE user_id = ?', [$userId]);
         $stored = $row ? (json_decode($row['settings_json'], true) ?: []) : [];
-        return array_merge(self::DEFAULTS, array_intersect_key($stored, self::DEFAULTS));
+        return array_merge(self::defaults(), array_intersect_key($stored, self::DEFAULTS));
+    }
+
+    /** Built-in defaults, overridden by the defaults an admin set on the admin page. */
+    public static function defaults(): array
+    {
+        $admin = (new AppSettingsRepository())->userDefaults();
+        $valid = [];
+        foreach (array_intersect_key($admin, self::DEFAULTS) as $key => $value) {
+            try {
+                $valid[$key] = (new self())->validate($key, $value);
+            } catch (\Throwable) {
+            }
+        }
+        return array_merge(self::DEFAULTS, $valid);
+    }
+
+    /** Validate a whole set of defaults (used by the admin page). */
+    public function validateAll(array $values): array
+    {
+        $out = [];
+        foreach ($values as $key => $value) {
+            if (isset(self::RULES[$key])) {
+                $out[$key] = $this->validate($key, $value);
+            }
+        }
+        return $out;
     }
 
     public function update(int $userId, array $changes): array

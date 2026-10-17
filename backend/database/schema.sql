@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     display_name    VARCHAR(255) NULL,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_login_at   DATETIME NULL,
+    blocked         TINYINT(1) NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
     UNIQUE KEY uq_users_login_email (login_email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -78,11 +79,33 @@ CREATE TABLE IF NOT EXISTS login_attempts (
     id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     ip_hash         CHAR(64) NOT NULL,
     email_hash      CHAR(64) NOT NULL,
+    ip              VARCHAR(45) NULL,
+    email           VARCHAR(255) NULL,
     success         TINYINT(1) NOT NULL DEFAULT 0,
     attempted_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_attempts_ip (ip_hash, attempted_at),
     KEY idx_attempts_email (email_hash, attempted_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Senders (or whole domains) whose remote images are always shown.
+CREATE TABLE IF NOT EXISTS trusted_senders (
+    id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id         INT UNSIGNED NOT NULL,
+    kind            ENUM('email','domain') NOT NULL,
+    value           VARCHAR(255) NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_trusted (user_id, kind, value),
+    CONSTRAINT fk_trusted_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- App-wide settings changed on the admin page (override config.php).
+CREATE TABLE IF NOT EXISTS app_settings (
+    name            VARCHAR(64) NOT NULL,
+    value_json      TEXT NOT NULL,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tracks applied migrations.
@@ -92,4 +115,4 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     PRIMARY KEY (version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT IGNORE INTO schema_migrations (version) VALUES ('001_initial');
+INSERT IGNORE INTO schema_migrations (version) VALUES ('001_initial'), ('002_trusted_senders_admin');

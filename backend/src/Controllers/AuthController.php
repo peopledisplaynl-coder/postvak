@@ -5,6 +5,8 @@ namespace Postvak\Controllers;
 
 use Postvak\Auth;
 use Postvak\Config;
+use Postvak\Migrator;
+use Postvak\Repositories\AppSettingsRepository;
 use Postvak\Http\HttpException;
 use Postvak\Http\Request;
 use Postvak\Http\Response;
@@ -34,6 +36,7 @@ final class AuthController
         if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $password === '') {
             throw HttpException::badRequest('Enter a valid address and password');
         }
+        Migrator::runQuietly(); // shared hosting has no CLI: apply database updates here
         $this->assertDomainAllowed($email);
         RateLimiter::check($r->ip(), $email);
 
@@ -52,6 +55,9 @@ final class AuthController
                 RateLimiter::record($r->ip(), $email, false);
             }
             throw $e;
+        }
+        if ($user !== null && !empty($user['blocked'])) {
+            throw HttpException::forbidden('This account has been blocked');
         }
         RateLimiter::record($r->ip(), $email, true);
 
@@ -89,8 +95,10 @@ final class AuthController
 
     private function respondWithSession(int $userId, string $csrf): void
     {
+        $user = $this->users->find($userId);
+        $user['is_admin'] = Auth::isAdmin($userId);
         Response::json([
-            'user'     => $this->users->find($userId),
+            'user'     => $user,
             'accounts' => array_map([AccountRepository::class, 'toPublic'], $this->accounts->forUser($userId)),
             'settings' => $this->settings->get($userId),
             'csrf'     => $csrf,
@@ -99,7 +107,7 @@ final class AuthController
 
     private function assertDomainAllowed(string $email): void
     {
-        $allowed = (array) Config::get('allowed_login_domains', []);
+        $allowed = (new AppSettingsRepository())->allowedLoginDomains();
         if ($allowed === []) {
             return;
         }

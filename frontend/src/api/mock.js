@@ -59,6 +59,8 @@ const folders = (id) => [
   { path: 'Band', name: 'Band', full_name: 'Band', delimiter: '.', selectable: true, role: null, unseen: 2, total: 8 },
 ]
 
+const trusted = [{ id: 1, kind: 'domain', value: 'bol.com' }]
+
 const wait = (ms = 250) => new Promise((r) => setTimeout(r, ms))
 const roleToPath = { archive: 'Archive', trash: 'Trash', junk: 'Junk', inbox: 'INBOX' }
 
@@ -67,7 +69,30 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
   const m = path.match(/^\/accounts\/(\d+)(\/.*)?$/)
   const id = m ? Number(m[1]) : null
   const sub = m?.[2] ?? ''
-  const session = () => ({ user: { id: 1, login_email: accounts[0].email }, accounts, settings, csrf: 'mock' })
+  const session = () => ({ user: { id: 1, login_email: accounts[0].email, is_admin: true }, accounts, settings, csrf: 'mock' })
+
+  if (path === '/trusted-senders' && method === 'GET') return trusted
+  if (path === '/trusted-senders' && method === 'POST') { const item = { id: trusted.length + 1, ...body }; trusted.push(item); return item }
+  if (path.startsWith('/trusted-senders/') && method === 'DELETE') { trusted.splice(trusted.findIndex((x) => x.id === Number(path.split('/').pop())), 1); return null }
+  if (path === '/admin/overview') return {
+    version: '0.2.0-mock', php: '8.3', debug: false,
+    extensions: { mbstring: true, openssl: true, sodium: true, pdo_mysql: true, iconv: true, fileinfo: true, zip: true, libxml: true },
+    limits: { upload_max_filesize: '64M', post_max_size: '64M', memory_limit: '256M', max_execution_time: '60' },
+    database: { server: 'MariaDB (mock)', migrations: { applied: { '001_initial': '' }, pending: [] } },
+    mail_server: { imap: { host: 'mail.example.nl', port: 993, ok: true, ms: 24 }, smtp: { host: 'mail.example.nl', port: 465, ok: true, ms: 31 } },
+    stats: { users: 3, accounts: 4, logins_24h: 6, failed_24h: 2 },
+  }
+  if (path === '/admin/users') return [
+    { id: 1, login_email: 'ton@example.nl', last_login_at: '2026-10-17 17:00:00', blocked: false, is_admin: true, accounts: accounts.map((a) => ({ email: a.email })) },
+    { id: 2, login_email: 'lisa@familie.nl', last_login_at: '2026-10-15 09:12:00', blocked: false, is_admin: false, accounts: [{ email: 'lisa@familie.nl' }] },
+  ]
+  if (path.startsWith('/admin/users/') && method === 'PATCH') return { blocked: body.blocked }
+  if (path === '/admin/security') return {
+    limits: { window_minutes: 15, max_per_ip: 20, max_per_email: 5 },
+    blocked_emails: [{ key: 'a'.repeat(64), email: 'oom@familie.nl', fails: 5 }], blocked_ips: [],
+    recent: [{ at: '2026-10-17 16:58:00', email: 'oom@familie.nl', ip: '84.12.3.4', success: false }, { at: '2026-10-17 16:30:00', email: 'ton@example.nl', ip: '84.12.3.9', success: true }],
+  }
+  if (path === '/admin/settings') return { allowed_login_domains: ['example.nl'], allowed_from_config: true, user_defaults: settings, admins: [] }
 
   if (path === '/auth/login') { sessionStorage.setItem('pv-mock-login', '1'); return session() }
   if (path === '/auth/me') {

@@ -162,8 +162,25 @@ async function ensureDir(dir) {
   madeDirs.add(dir)
 }
 
+/**
+ * Remember what has been uploaded. On Windows the file can briefly be locked
+ * (virus scanner, OneDrive, editor), so failures are retried and never stop the deploy.
+ */
 function saveState() {
-  writeFileSync(stateFile, JSON.stringify({ target, files: state }, null, 1))
+  const data = JSON.stringify({ target, files: state })
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      writeFileSync(stateFile, data)
+      return
+    } catch (e) {
+      if (attempt === 5) {
+        process.stdout.write(`\n  (could not save upload log: ${e.code}; continuing)\n`)
+        return
+      }
+      const until = Date.now() + 200 * attempt
+      while (Date.now() < until) { /* short synchronous wait */ }
+    }
+  }
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -186,7 +203,7 @@ try {
     }
     if (f.local !== appPathFile) state[f.remote] = f.hash
     done++
-    if (done % 25 === 0 || done === todo.length) {
+    if (done % 100 === 0 || done === todo.length) {
       saveState()
       process.stdout.write(`\r  uploaded ${done}/${todo.length}   `)
     }

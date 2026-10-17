@@ -38,6 +38,7 @@ function makeMessages(accountId, folder, count) {
       from: { name, email }, to: [{ name: '', email: accounts[accountId - 1].email }],
       date: new Date(now - i * 1000 * 60 * 47).toISOString(),
       seen: i > 3 && i % 5 !== 0, flagged: i % 9 === 2, answered: i % 7 === 3, has_attachments: i % 4 === 1,
+      snippet: ['Hoi Ton, zoals besproken stuur ik je hierbij de details voor zaterdag.', 'Je bestelling is verzonden en wordt morgen tussen 10:00 en 14:00 bezorgd.', 'Bedankt voor je bericht. We nemen zo snel mogelijk contact met je op.', 'Hierbij de foto’s van het optreden, groetjes!'][i % 4],
     }
   })
 }
@@ -57,7 +58,9 @@ const folders = (id) => [
   { path: 'Junk', name: 'Junk', full_name: 'Junk', delimiter: '.', selectable: true, role: 'junk', unseen: 0, total: 0 },
   { path: 'Trash', name: 'Trash', full_name: 'Trash', delimiter: '.', selectable: true, role: 'trash', unseen: 0, total: box(id, 'Trash').length },
   { path: 'Band', name: 'Band', full_name: 'Band', delimiter: '.', selectable: true, role: null, unseen: 2, total: 8 },
+  ...extraFolders.map((n) => ({ path: n, name: n, full_name: n, delimiter: '.', selectable: true, role: null, unseen: 0, total: box(id, n).length })),
 ]
+const extraFolders = []
 
 const trusted = [{ id: 1, kind: 'domain', value: 'bol.com' }]
 
@@ -111,7 +114,10 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
 
   if (sub === '' && method === 'PATCH') return Object.assign(accounts.find((a) => a.id === id), body)
   if (sub === '' && method === 'DELETE') { accounts.splice(accounts.findIndex((a) => a.id === id), 1); return null }
-  if (sub === '/folders') return folders(id)
+  if (sub === '/folders' && method === 'POST') { extraFolders.push(body.name); return { path: body.name, folders: folders(id) } }
+  if (sub === '/folders' && method === 'PATCH') { const i = extraFolders.indexOf(body.path); if (i >= 0) extraFolders[i] = body.name; return { path: body.name, folders: folders(id) } }
+  if (sub === '/folders' && method === 'DELETE') { const p = new URLSearchParams(path.split('?')[1]).get('path'); extraFolders.splice(extraFolders.indexOf(p), 1); return { folders: folders(id) } }
+  if (sub.startsWith('/folders')) return folders(id)
 
   if (sub === '/messages') {
     let list = box(id, query.folder || 'INBOX')

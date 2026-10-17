@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import MessageRow from './MessageRow.vue'
+import FolderPicker from './FolderPicker.vue'
 import { useMail } from '../stores/mail.js'
 import { t } from '../i18n/index.js'
 
@@ -58,6 +59,19 @@ async function onTouchEnd() {
   pullStart = null
 }
 
+// ---- multi-select
+const picking = ref(false)
+const allSeen = computed(() => mail.selectedMessages.every((m) => m.seen))
+function moveSelected({ path, label }) {
+  picking.value = false
+  mail.moveTo(mail.selectedMessages, path, label)
+}
+function onKey(e) {
+  if (e.key === 'Escape' && mail.selecting && !picking.value) mail.clearSelection()
+}
+onMounted(() => window.addEventListener('keydown', onKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+
 // ---- sorting
 const sortOpen = ref(false)
 const sortKeys = ['date_desc', 'date_asc', 'from', 'subject', 'size_desc']
@@ -72,7 +86,35 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
 <template>
   <section class="flex h-full min-h-0 flex-col bg-surface">
     <header class="pt-safe flex items-center gap-1 border-b border-line px-2 py-2">
-      <template v-if="!searching">
+      <!-- Selection mode -->
+      <template v-if="mail.selecting">
+        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :aria-label="t('list.clearSelection')" @click="mail.clearSelection()">
+          <AppIcon name="close" />
+        </button>
+        <span class="min-w-0 flex-1 truncate px-1 font-semibold tabular-nums">
+          <span class="sm:hidden">{{ mail.selected.length }}</span>
+          <span class="hidden sm:inline">{{ t('list.selected', { n: mail.selected.length }) }}</span>
+        </span>
+        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('list.selectAll')" @click="mail.selectAll()">
+          <AppIcon name="selectAll" />
+        </button>
+        <button v-if="mail.folderRole !== 'archive'" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.archive')" @click="mail.bulk('archive')">
+          <AppIcon name="archive" />
+        </button>
+        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-danger" :title="t('actions.trash')" @click="mail.bulk('trash')">
+          <AppIcon name="trash" />
+        </button>
+        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.read')" @click="mail.bulk('read')">
+          <AppIcon :name="allSeen ? 'unread' : 'read'" />
+        </button>
+        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.flag')" @click="mail.bulk('flag')">
+          <AppIcon name="flag" />
+        </button>
+        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.move')" @click="picking = true">
+          <AppIcon name="move" />
+        </button>
+      </template>
+      <template v-else-if="!searching">
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink lg:hidden" :aria-label="t('actions.settings')" @click="emit('menu')">
           <AppIcon name="menu" />
         </button>
@@ -163,5 +205,7 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
       <div ref="sentinel" class="h-px" />
       <p v-if="mail.loadingMore" class="py-4 text-center text-sm text-muted">…</p>
     </div>
+
+    <FolderPicker v-if="picking" :count="mail.selected.length" @close="picking = false" @pick="moveSelected" />
   </section>
 </template>

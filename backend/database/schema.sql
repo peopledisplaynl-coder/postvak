@@ -108,6 +108,18 @@ CREATE TABLE IF NOT EXISTS app_settings (
     PRIMARY KEY (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Cache of preview lines for the message list (rebuilt automatically when missing).
+CREATE TABLE IF NOT EXISTS message_snippets (
+    account_id      INT UNSIGNED NOT NULL,
+    folder_hash     CHAR(40) NOT NULL,
+    uidvalidity     BIGINT UNSIGNED NOT NULL,
+    uid             INT UNSIGNED NOT NULL,
+    snippet         VARCHAR(400) NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (account_id, folder_hash, uid),
+    CONSTRAINT fk_snippets_account FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Tracks applied migrations.
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version         VARCHAR(32) NOT NULL,
@@ -115,4 +127,4 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     PRIMARY KEY (version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT IGNORE INTO schema_migrations (version) VALUES ('001_initial'), ('002_trusted_senders_admin');
+INSERT IGNORE INTO schema_migrations (version) VALUES ('001_initial'), ('002_trusted_senders_admin'), ('003_message_snippets');

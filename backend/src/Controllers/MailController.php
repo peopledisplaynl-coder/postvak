@@ -13,6 +13,7 @@ use Postvak\Mail\ImapService;
 use Postvak\Mail\MessageSanitizer;
 use Postvak\Mail\SmtpService;
 use Postvak\Repositories\AccountRepository;
+use Postvak\Repositories\SnippetCache;
 use Postvak\Repositories\TrustedSenderRepository;
 use Throwable;
 use Webklex\PHPIMAP\Message;
@@ -34,16 +35,45 @@ final class MailController
         Response::json($imap->folders());
     }
 
+    /** POST /accounts/{id}/folders  {name, parent?} */
+    public function createFolder(Request $r): void
+    {
+        [, $imap] = $this->open($r);
+        $parent = $r->input('parent');
+        $path = $imap->createFolder($r->string('name'), is_string($parent) ? $parent : null);
+        Response::json(['path' => $path, 'folders' => $imap->folders()], 201);
+    }
+
+    /** PATCH /accounts/{id}/folders  {path, name} */
+    public function renameFolder(Request $r): void
+    {
+        [, $imap] = $this->open($r);
+        $path = $imap->renameFolder($r->string('path'), $r->string('name'));
+        Response::json(['path' => $path, 'folders' => $imap->folders()]);
+    }
+
+    /** DELETE /accounts/{id}/folders?path=... */
+    public function deleteFolder(Request $r): void
+    {
+        [, $imap] = $this->open($r);
+        $path = (string) $r->query('path', '');
+        if ($path === '') {
+            throw HttpException::badRequest('path is required');
+        }
+        $imap->deleteFolder($path);
+        Response::json(['folders' => $imap->folders()]);
+    }
+
     /** GET /accounts/{id}/messages?folder=INBOX&page=1&per_page=50&q=search&sort=date_desc */
     public function messages(Request $r): void
     {
-        [, $imap] = $this->open($r);
+        [$account, $imap] = $this->open($r);
         $page = max(1, (int) $r->query('page', 1));
         $perPage = min(100, max(10, (int) $r->query('per_page', 50)));
         $q = trim((string) $r->query('q', ''));
         $sort = (string) $r->query('sort', 'date_desc');
 
-        Response::json($imap->listMessages($this->folderParam($r), $page, $perPage, $q === '' ? null : $q, $sort));
+        Response::json($imap->listMessages($this->folderParam($r), $page, $perPage, $q === '' ? null : $q, $sort, new SnippetCache((int) $account['id'])));
     }
 
     /** GET /accounts/{id}/messages/{uid}?folder=INBOX&images=1 */

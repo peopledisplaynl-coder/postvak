@@ -86,10 +86,11 @@ All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` b
 | GET / POST | `/accounts` | List / add account (verified first) |
 | PATCH / DELETE | `/accounts/{id}` | Edit (name, colour, signature, folders, server, password) / remove |
 | GET | `/accounts/{id}/folders` | Folders with unseen/total counts and detected role |
-| GET | `/accounts/{id}/messages?folder=&page=&per_page=&q=&sort=` | Message summaries; `sort` = `date_desc` (default), `date_asc`, `from`, `subject`, `size_desc`. Sorted by the server (IMAP SORT), searched in from/to/subject |
+| POST / PATCH / DELETE | `/accounts/{id}/folders` | Create `{name, parent?}`, rename `{path, name}`, delete `?path=` (not INBOX or special folders) |
+| GET | `/accounts/{id}/messages?folder=&page=&per_page=&q=&sort=` | Message summaries incl. `snippet` (preview line, cached in `message_snippets`); `sort` = `date_desc` (default), `date_asc`, `from`, `subject`, `size_desc`. Sorted by the server (IMAP SORT), searched in from/to/subject |
 | GET | `/accounts/{id}/messages/{uid}?folder=&images=1` | Full message, sanitised |
 | GET | `/accounts/{id}/messages/{uid}/attachments/{index}?folder=` | Download |
-| POST | `/accounts/{id}/move` | `{folder, uids, target: archive\|trash\|junk\|inbox\|<path>}` |
+| POST | `/accounts/{id}/move` | `{folder, uids, target: archive\|trash\|junk\|inbox\|<path>}`, one `UID MOVE` for all uids |
 | POST | `/accounts/{id}/flags` | `{folder, uids, seen?, flagged?, answered?}` |
 | POST | `/accounts/{id}/send` | multipart: `payload` (JSON) + `files[]` |
 | GET | `/contacts?q=` | Address autocomplete |

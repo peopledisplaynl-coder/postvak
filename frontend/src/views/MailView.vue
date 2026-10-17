@@ -83,8 +83,15 @@ function onKey(e) {
   switch (e.key) {
     case 'j': if (list[i + 1]) openMessage(list[i + 1]); break
     case 'k': if (i > 0) openMessage(list[i - 1]); break
-    case 'e': if (current) mail.act('archive', current).then((ok) => ok && closeMessage()); break
-    case '#': case 'Delete': if (current) mail.act('trash', current).then((ok) => ok && closeMessage()); break
+    case 'e':
+      if (mail.selecting) mail.bulk('archive')
+      else if (current) mail.act('archive', current).then((ok) => ok && closeMessage())
+      break
+    case '#': case 'Delete':
+      if (mail.selecting) mail.bulk('trash')
+      else if (current) mail.act('trash', current).then((ok) => ok && closeMessage())
+      break
+    case 'x': if (current) mail.toggleSelect(current.uid); break
     case 'c': e.preventDefault(); compose(); break
     case 'Escape': if (uid.value) closeMessage(); break
     default: return
@@ -133,7 +140,7 @@ onBeforeUnmount(() => {
 
     <!-- Floating compose button on phones and tablets -->
     <button
-      v-if="!uid && !draft"
+      v-if="!uid && !draft && !mail.selecting"
       class="fixed right-5 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-20 flex size-14 items-center justify-center rounded-2xl bg-accent text-white shadow-lg transition active:scale-95 lg:hidden"
       :class="toasts.items.length ? '-translate-y-16 sm:translate-y-0' : ''"
       :aria-label="t('actions.compose')"

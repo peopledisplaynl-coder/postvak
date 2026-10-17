@@ -6,14 +6,17 @@ import AccountForm from '../components/AccountForm.vue'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
 import { api } from '../api/client.js'
+import { useMail } from '../stores/mail.js'
+import { folderLabel, folderIcon, folderOwnName } from '../folders.js'
 import { t } from '../i18n/index.js'
 
 const route = useRoute()
 const router = useRouter()
 const session = useSession()
 const toasts = useToasts()
+const mail = useMail()
 
-const tabs = ['general', 'swipe', 'privacy', 'accounts']
+const tabs = ['general', 'swipe', 'privacy', 'folders', 'accounts']
 const tab = computed(() => (tabs.includes(route.params.tab) ? route.params.tab : 'general'))
 const editing = ref(null) // account id, 'new' or null
 
@@ -69,6 +72,57 @@ async function removeTrusted(item) {
   } catch (e) {
     toasts.error(t('toast.failed', { msg: e.message }))
   }
+}
+
+// ---- folders
+const folderAccountId = ref(session.loginAccount?.id)
+const folderList = ref([])
+const newFolder = ref('')
+const newFolderParent = ref('')
+const renaming = ref(null)
+const renameValue = ref('')
+const folderBusy = ref(false)
+const editableFolders = computed(() => folderList.value.filter((f) => f.selectable && f.role !== 'trash' && f.role !== 'junk'))
+
+async function loadFolders() {
+  try {
+    folderList.value = await api.get(`/accounts/${folderAccountId.value}/folders`)
+  } catch (e) {
+    toasts.error(t('toast.failed', { msg: e.message }))
+  }
+}
+watch([tab, folderAccountId], ([name]) => name === 'folders' && loadFolders(), { immediate: true })
+
+async function folderCall(fn) {
+  folderBusy.value = true
+  try {
+    const res = await fn()
+    if (res?.folders) folderList.value = res.folders
+    // Keep the sidebar in sync when it shows this account.
+    if (mail.accountId === folderAccountId.value && res?.folders) mail.folders[mail.accountId] = res.folders
+    return true
+  } catch (e) {
+    toasts.error(t('toast.failed', { msg: e.message }))
+    return false
+  } finally {
+    folderBusy.value = false
+  }
+}
+async function createFolder() {
+  const ok = await folderCall(() => api.post(`/accounts/${folderAccountId.value}/folders`, { name: newFolder.value.trim(), parent: newFolderParent.value || null }))
+  if (ok) newFolder.value = ''
+}
+function startRename(f) {
+  renaming.value = f.path
+  renameValue.value = folderOwnName(f)
+}
+async function renameFolder(f) {
+  if (await folderCall(() => api.patch(`/accounts/${folderAccountId.value}/folders`, { path: f.path, name: renameValue.value.trim() }))) renaming.value = null
+}
+async function deleteFolder(f) {
+  const msg = f.total ? t('settings.confirmDeleteFolderMessages', { name: folderLabel(f), n: f.total }) : t('settings.confirmDeleteFolder', { name: folderLabel(f) })
+  if (!confirm(msg)) return
+  await folderCall(() => api.del(`/accounts/${folderAccountId.value}/folders?path=${encodeURIComponent(f.path)}`))
 }
 
 async function logout() {
@@ -224,6 +278,47 @@ const pollOptions = [30, 60, 120, 300, 600]
           </ul>
           <p v-else class="mt-3 text-sm text-muted">{{ t('settings.trustedEmpty') }}</p>
         </section>
+      </div>
+
+      <!-- Folders -->
+      <div v-else-if="tab === 'folders'" class="space-y-4">
+        <label v-if="session.accounts.length > 1" class="flex items-center justify-between gap-4">
+          <span class="text-muted">{{ t('settings.foldersOf') }}</span>
+          <select v-model="folderAccountId" class="rounded-lg bg-sunken px-3 py-1.5">
+            <option v-for="a in session.accounts" :key="a.id" :value="a.id">{{ a.email }}</option>
+          </select>
+        </label>
+
+        <form class="flex flex-wrap gap-2" @submit.prevent="createFolder">
+          <input v-model="newFolder" class="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 outline-none focus:border-accent" :placeholder="t('folderPicker.newName')" />
+          <select v-model="newFolderParent" class="rounded-lg bg-sunken px-3 py-2" :title="t('settings.folderParent')">
+            <option value="">{{ t('settings.folderTopLevel') }}</option>
+            <option v-for="f in editableFolders" :key="f.path" :value="f.path">{{ t('settings.folderUnder', { name: folderLabel(f) }) }}</option>
+          </select>
+          <button class="rounded-lg bg-accent px-4 py-2 font-medium text-white disabled:opacity-60" :disabled="!newFolder.trim() || folderBusy">{{ t('settings.add') }}</button>
+        </form>
+
+        <ul class="divide-y divide-line rounded-2xl bg-surface ring-1 ring-line">
+          <li v-for="f in folderList" :key="f.path" class="flex items-center gap-3 px-4 py-2.5">
+            <AppIcon :name="folderIcon(f)" :size="18" class="shrink-0 text-muted" />
+            <template v-if="renaming === f.path">
+              <form class="flex min-w-0 flex-1 gap-2" @submit.prevent="renameFolder(f)">
+                <input v-model="renameValue" class="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 py-1 outline-none focus:border-accent" autofocus />
+                <button class="rounded-lg bg-accent px-3 py-1 text-sm font-medium text-white" :disabled="folderBusy">{{ t('settings.save') }}</button>
+                <button type="button" class="rounded-lg px-2 py-1 text-sm hover:bg-sunken" @click="renaming = null">{{ t('settings.cancel') }}</button>
+              </form>
+            </template>
+            <template v-else>
+              <span class="min-w-0 flex-1 truncate">{{ folderLabel(f) }}</span>
+              <span v-if="f.total !== null" class="shrink-0 text-sm text-muted tabular-nums">{{ f.total }}</span>
+              <template v-if="!f.role">
+                <button class="rounded-lg px-2 py-1 text-sm hover:bg-sunken" @click="startRename(f)">{{ t('settings.rename') }}</button>
+                <button class="rounded-lg px-2 py-1 text-sm text-danger hover:bg-danger/10" @click="deleteFolder(f)">{{ t('settings.remove') }}</button>
+              </template>
+            </template>
+          </li>
+        </ul>
+        <p class="text-sm text-muted">{{ t('settings.foldersHint') }}</p>
       </div>
 
       <!-- Accounts -->

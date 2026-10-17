@@ -5,6 +5,7 @@ namespace Postvak\Mail;
 
 use Postvak\Crypto;
 use Postvak\Http\HttpException;
+use Postvak\Repositories\SnippetCache;
 use Throwable;
 use Webklex\PHPIMAP\Client;
 use Webklex\PHPIMAP\ClientManager;
@@ -109,6 +110,92 @@ final class ImapService
         return $name;
     }
 
+    /** Create a folder; returns its path. Lands under INBOX on servers that use the INBOX. namespace. */
+    public function createFolder(string $name, ?string $parentPath = null): string
+    {
+        $name = $this->validFolderName($name);
+        $delimiter = $this->delimiter();
+        if ($parentPath === null || $parentPath === '') {
+            $parentPath = $this->usesInboxNamespace() ? 'INBOX' : '';
+        } else {
+            $this->folder($parentPath); // must exist
+        }
+        $path = ($parentPath !== '' ? $parentPath . $delimiter : '') . mb_convert_encoding($name, 'UTF7-IMAP', 'UTF-8');
+        if ($this->findFolder($path)) {
+            throw HttpException::badRequest('A folder with this name already exists');
+        }
+        $conn = $this->client->getConnection();
+        $conn->createFolder($path)->validatedData();
+        try {
+            $conn->subscribeFolder($path)->validatedData();
+        } catch (Throwable) {
+        }
+        $this->folderCache = null;
+        return $path;
+    }
+
+    /** Rename a folder (keeps it under the same parent); returns the new path. */
+    public function renameFolder(string $path, string $newName): string
+    {
+        $this->assertFolderEditable($path);
+        $newName = $this->validFolderName($newName);
+        $delimiter = $this->delimiter();
+        $pos = strrpos($path, $delimiter);
+        $parent = $pos === false ? '' : substr($path, 0, $pos);
+        $newPath = ($parent !== '' ? $parent . $delimiter : '') . mb_convert_encoding($newName, 'UTF7-IMAP', 'UTF-8');
+        if ($newPath === $path) {
+            return $path;
+        }
+        if ($this->findFolder($newPath)) {
+            throw HttpException::badRequest('A folder with this name already exists');
+        }
+        $conn = $this->client->getConnection();
+        $conn->renameFolder($path, $newPath)->validatedData();
+        try {
+            $conn->subscribeFolder($newPath)->validatedData();
+        } catch (Throwable) {
+        }
+        $this->folderCache = null;
+        return $newPath;
+    }
+
+    /** Delete a folder including its messages. INBOX and special folders cannot be deleted. */
+    public function deleteFolder(string $path): void
+    {
+        $this->assertFolderEditable($path);
+        $this->client->getConnection()->deleteFolder($path)->validatedData();
+        $this->folderCache = null;
+    }
+
+    private function assertFolderEditable(string $path): void
+    {
+        $this->folder($path); // 404 when missing
+        $roles = FolderResolver::resolve($this->folders(false), $this->account);
+        if (strcasecmp($path, 'INBOX') === 0 || in_array($path, array_filter($roles), true)) {
+            throw HttpException::badRequest('This folder cannot be changed');
+        }
+    }
+
+    private function validFolderName(string $name): string
+    {
+        $name = trim(preg_replace('/\s+/u', ' ', $name) ?? '');
+        $delimiter = $this->delimiter();
+        if ($name === '' || mb_strlen($name) > 100 || preg_match('/[\x00-\x1f*%]/', $name) || str_contains($name, $delimiter)) {
+            throw HttpException::badRequest("Invalid folder name (do not use \"$delimiter\", * or %)");
+        }
+        return $name;
+    }
+
+    private function delimiter(): string
+    {
+        foreach ($this->folders(false) as $f) {
+            if (!empty($f['delimiter'])) {
+                return $f['delimiter'];
+            }
+        }
+        return '/';
+    }
+
     // ----------------------------------------------------------------- messages
 
     /** Sort orders a user can choose, mapped to IMAP SORT criteria (RFC 5256). */
@@ -129,10 +216,11 @@ final class ImapService
      *
      * @return array{total:int, page:int, per_page:int, sort:string, messages:array}
      */
-    public function listMessages(string $folderPath, int $page = 1, int $perPage = 50, ?string $search = null, string $sort = 'date_desc'): array
+    public function listMessages(string $folderPath, int $page = 1, int $perPage = 50, ?string $search = null, string $sort = 'date_desc', ?SnippetCache $cache = null): array
     {
         $folder = $this->folder($folderPath);
-        $this->client->openFolder($folder->path, true);
+        $selected = $this->client->openFolder($folder->path, true);
+        $uidvalidity = (int) ($selected['uidvalidity'] ?? 0);
         $sort = isset(self::SORTS[$sort]) ? $sort : 'date_desc';
 
         $uids = $this->sortedUids($sort, $search);
@@ -144,15 +232,58 @@ final class ImapService
             $conn = $this->client->getConnection();
             $headers = $conn->headers($pageUids, 'RFC822', IMAP::ST_UID)->validatedData();
             $flags = $conn->flags($pageUids, IMAP::ST_UID)->validatedData();
+            $snippets = $this->snippets($folderPath, $uidvalidity, $pageUids, $headers, $cache);
             foreach ($pageUids as $uid) {
                 if (!isset($headers[$uid])) {
                     continue; // deleted in the meantime
                 }
-                $messages[] = $this->summaryFromHeader($uid, (string) $headers[$uid], (array) ($flags[$uid] ?? []), $folderPath);
+                $summary = $this->summaryFromHeader($uid, (string) $headers[$uid], (array) ($flags[$uid] ?? []), $folderPath);
+                $summary['snippet'] = $snippets[$uid] ?? '';
+                $messages[] = $summary;
             }
         }
 
         return ['total' => $total, 'page' => $page, 'per_page' => $perPage, 'sort' => $sort, 'messages' => $messages];
+    }
+
+    /**
+     * Preview lines for the given messages: from the cache, otherwise from the first
+     * few kB of each body (one IMAP command for all missing ones).
+     *
+     * @return array<int, string>
+     */
+    private function snippets(string $folder, int $uidvalidity, array $uids, array $headers, ?SnippetCache $cache): array
+    {
+        $known = $cache && $uidvalidity ? $cache->get($folder, $uidvalidity, $uids) : [];
+        $missing = array_values(array_filter($uids, static fn ($u) => !array_key_exists($u, $known) && isset($headers[$u])));
+        if ($missing === []) {
+            return $known;
+        }
+
+        $new = [];
+        try {
+            $item = 'BODY.PEEK[TEXT]<0.' . SnippetExtractor::FETCH_BYTES . '>';
+            // Two items, so the library returns every field of the response by name.
+            $bodies = $this->client->getConnection()->fetch(['UID', $item], $missing, null, IMAP::ST_UID)->validatedData();
+            foreach ($missing as $uid) {
+                $data = (array) ($bodies[$uid] ?? []);
+                $start = '';
+                foreach ($data as $key => $value) {
+                    if (is_string($key) && str_starts_with($key, 'BODY[TEXT]')) {
+                        $start = (string) $value;
+                    }
+                }
+                $new[$uid] = SnippetExtractor::extract((string) $headers[$uid], $start);
+            }
+        } catch (Throwable $e) {
+            error_log('[postvak] snippets failed: ' . $e->getMessage());
+            return $known;
+        }
+
+        if ($cache && $uidvalidity) {
+            $cache->put($folder, $uidvalidity, $new);
+        }
+        return $known + $new;
     }
 
     /** All matching UIDs in the requested order. Falls back to UID order if the server lacks SORT. */
@@ -256,12 +387,14 @@ final class ImapService
     /** @param int[] $uids */
     public function move(string $fromPath, array $uids, string $toPath): void
     {
-        $folder = $this->folder($fromPath);
-        $this->folder($toPath); // throws 404 when the target does not exist
-        foreach ($uids as $uid) {
-            $message = $folder->query()->setFetchBody(false)->leaveUnread()->getMessageByUid((int) $uid);
-            $message->move($toPath, true);
+        $from = $this->folder($fromPath);
+        $to = $this->folder($toPath); // throws 404 when the target does not exist
+        if ($from->path === $to->path || $uids === []) {
+            return;
         }
+        $this->client->openFolder($from->path, true);
+        // One UID MOVE for all messages (falls back to COPY + delete on servers without MOVE).
+        $this->client->getConnection()->moveManyMessages(array_map('intval', $uids), $to->path, IMAP::ST_UID)->validatedData();
     }
 
     /**
@@ -270,15 +403,16 @@ final class ImapService
      */
     public function setFlags(string $folderPath, array $uids, array $flags): void
     {
-        $map = ['seen' => 'Seen', 'flagged' => 'Flagged', 'answered' => 'Answered'];
+        $map = ['seen' => '\\Seen', 'flagged' => '\\Flagged', 'answered' => '\\Answered'];
         $folder = $this->folder($folderPath);
-        foreach ($uids as $uid) {
-            $message = $folder->query()->setFetchBody(false)->leaveUnread()->getMessageByUid((int) $uid);
-            foreach ($flags as $key => $on) {
-                if (!isset($map[$key])) {
-                    continue;
-                }
-                $on ? $message->setFlag($map[$key]) : $message->unsetFlag($map[$key]);
+        $this->client->openFolder($folder->path, true);
+        $conn = $this->client->getConnection();
+        foreach ($flags as $key => $on) {
+            if (!isset($map[$key])) {
+                continue;
+            }
+            foreach ($uids as $uid) {
+                $conn->store([$map[$key]], (int) $uid, null, $on ? '+' : '-', true, IMAP::ST_UID);
             }
         }
     }
@@ -287,9 +421,12 @@ final class ImapService
     public function deletePermanently(string $folderPath, array $uids): void
     {
         $folder = $this->folder($folderPath);
+        $this->client->openFolder($folder->path, true);
+        $conn = $this->client->getConnection();
         foreach ($uids as $uid) {
-            $folder->query()->setFetchBody(false)->leaveUnread()->getMessageByUid((int) $uid)->delete(true);
+            $conn->store(['\\Deleted'], (int) $uid, null, '+', true, IMAP::ST_UID);
         }
+        $conn->expunge();
     }
 
     /** Store a raw RFC 822 message, e.g. a copy of a sent mail in the Sent folder. */
@@ -320,7 +457,8 @@ final class ImapService
     private function findFolder(string $path): ?Folder
     {
         try {
-            return $this->client->getFolderByPath($path, false, true);
+            // Paths are kept in IMAP's modified UTF-7 as the server sends them: do not convert again.
+            return $this->client->getFolderByPath($path, true, true);
         } catch (Throwable) {
             return null;
         }

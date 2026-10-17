@@ -24,13 +24,13 @@
 
 ## Phase 2: comfort
 
-- [ ] Preview snippets in the list (partial `BODY.PEEK[TEXT]<0.200>` fetch, cached in MySQL)
+- [x] Preview snippets in the list (partial `BODY.PEEK[TEXT]<0.4096>` fetch, cached in MySQL)
 - [ ] Unified inbox across all accounts (setting `unified_inbox` already exists)
 - [ ] Conversation view (group by `References` / `In-Reply-To`)
 - [ ] Drafts: autosave to the Drafts folder, edit existing drafts
 - [ ] Rich text editor (e.g. Tiptap) instead of `execCommand`
-- [ ] Multi-select in the list (long press on mobile, checkboxes on desktop) with bulk actions
-- [ ] Move to folder, create/rename folders
+- [x] Multi-select in the list (long press on mobile, avatar click on desktop) with bulk actions
+- [x] Move to folder, create/rename/delete folders
 - [ ] Contacts page (import vCard, edit)
 - [ ] English translation
 

@@ -2,6 +2,7 @@
 import { ref, watch, computed, nextTick } from 'vue'
 import DOMPurify from 'dompurify'
 import AppIcon from './AppIcon.vue'
+import FolderPicker from './FolderPicker.vue'
 import { useMail } from '../stores/mail.js'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
@@ -107,6 +108,12 @@ async function act(action) {
   if (done && (action === 'archive' || action === 'trash')) emit('back')
 }
 
+const picking = ref(false)
+function moveTo({ path, label }) {
+  picking.value = false
+  if (summary.value && mail.moveTo([summary.value], path, label)) emit('back')
+}
+
 function reply(mode) {
   emit('reply', { mode, message: message.value })
 }
@@ -124,6 +131,7 @@ watch(srcdoc, () => nextTick(() => (frameHeight.value = 200)))
       <template v-if="summary">
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.archive')" @click="act('archive')"><AppIcon name="archive" /></button>
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-danger" :title="t('actions.trash')" @click="act('trash')"><AppIcon name="trash" /></button>
+        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.move')" @click="picking = true"><AppIcon name="move" /></button>
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.markUnread')" @click="mail.setFlag(summary, 'seen', false); emit('back')"><AppIcon name="unread" /></button>
         <button class="rounded-lg p-2 hover:bg-sunken" :class="summary.flagged ? 'text-flag' : 'text-muted hover:text-ink'" :title="t('actions.flag')" @click="mail.setFlag(summary, 'flagged', !summary.flagged)">
           <AppIcon name="flag" :class="summary.flagged ? 'fill-current' : ''" />
@@ -220,5 +228,7 @@ watch(srcdoc, () => nextTick(() => (frameHeight.value = 200)))
     <div v-else class="flex flex-1 items-center justify-center p-8 text-muted">
       {{ t('reader.select') }}
     </div>
+
+    <FolderPicker v-if="picking" @close="picking = false" @pick="moveTo" />
   </section>
 </template>

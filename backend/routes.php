@@ -31,6 +31,9 @@ $router->patch('/accounts/{id}', [$accounts, 'update']);
 $router->delete('/accounts/{id}', [$accounts, 'destroy']);
 
 $router->get('/accounts/{id}/folders', [$mail, 'folders']);
+$router->post('/accounts/{id}/folders', [$mail, 'createFolder']);
+$router->patch('/accounts/{id}/folders', [$mail, 'renameFolder']);
+$router->delete('/accounts/{id}/folders', [$mail, 'deleteFolder']);
 $router->get('/accounts/{id}/messages', [$mail, 'messages']);
 $router->get('/accounts/{id}/messages/{uid}', [$mail, 'show']);
 $router->get('/accounts/{id}/messages/{uid}/attachments/{index}', [$mail, 'attachment']);

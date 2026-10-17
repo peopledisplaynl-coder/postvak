@@ -9,7 +9,7 @@ declare(strict_types=1);
  * script fills in the right relative path. Default: the backend folder in this repo.
  */
 
-const POSTVAK_VERSION = '0.2.0';
+const POSTVAK_VERSION = '0.3.0';
 
 $appDir = getenv('POSTVAK_APP') ?: (is_file(__DIR__ . '/app-path.php') ? require __DIR__ . '/app-path.php' : __DIR__ . '/../..');
 

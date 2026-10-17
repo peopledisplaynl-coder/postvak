@@ -4,20 +4,11 @@ import AppIcon from './AppIcon.vue'
 import { useSession } from '../stores/session.js'
 import { useMail } from '../stores/mail.js'
 import { t } from '../i18n/index.js'
+import { folderLabel, folderIcon } from '../folders.js'
 
 const emit = defineEmits(['navigate', 'compose'])
 const session = useSession()
 const mail = useMail()
-
-const roleIcon = { inbox: 'inbox', drafts: 'drafts', sent: 'sent', archive: 'archive', junk: 'junk', trash: 'trash' }
-
-function folderLabel(f) {
-  if (f.role) return t(`folders.${f.role}`)
-  // Show nested folders without the INBOX prefix: "INBOX.Band.2024" -> "Band / 2024"
-  const parts = f.full_name.split(f.delimiter)
-  if (parts[0].toUpperCase() === 'INBOX') parts.shift()
-  return parts.join(' / ')
-}
 
 const folders = computed(() => mail.currentFolders.filter((f) => f.selectable))
 
@@ -62,7 +53,7 @@ function go(accountId, path = 'INBOX') {
           :class="f.path === mail.folderPath ? 'bg-accent-soft font-medium text-accent' : 'hover:bg-sunken'"
           @click="go(mail.accountId, f.path)"
         >
-          <AppIcon :name="roleIcon[f.role] ?? 'folder'" :size="19" />
+          <AppIcon :name="folderIcon(f)" :size="19" />
           <span class="min-w-0 flex-1 truncate">{{ folderLabel(f) }}</span>
           <span v-if="f.unseen && f.role !== 'trash' && f.role !== 'sent'" class="text-sm tabular-nums" :class="f.role === 'inbox' ? 'font-semibold' : 'text-muted'">
             {{ f.unseen }}

@@ -19,9 +19,12 @@ const mail = useMail()
 const leftAction = computed(() => session.settings.swipe_left ?? 'trash')
 const rightAction = computed(() => session.settings.swipe_right ?? 'archive')
 
-const { offset, dragging, flying, direction, progress, armed, handlers } = useSwipe({
-  enabledLeft: () => leftAction.value !== 'none',
-  enabledRight: () => rightAction.value !== 'none',
+const selected = computed(() => mail.selected.includes(props.message.uid))
+
+const { offset, dragging, flying, direction, progress, armed, handlers: swipe } = useSwipe({
+  // No swiping while selecting several messages.
+  enabledLeft: () => leftAction.value !== 'none' && !mail.selecting,
+  enabledRight: () => rightAction.value !== 'none' && !mail.selecting,
   onCommit: async (dir) => {
     const action = dir === 'left' ? leftAction.value : rightAction.value
     const result = await mail.act(action, props.message)
@@ -57,6 +60,54 @@ const compact = computed(() => session.settings.density === 'compact')
 function quick(action) {
   mail.act(action, props.message)
 }
+
+// ---- long press (touch) selects the message, like in Gmail
+let pressTimer = null
+let pressStart = null
+let longPressed = false
+let dragged = false // pointer moved: the following click is not a tap
+
+function onPointerdown(e) {
+  swipe.onPointerdown(e)
+  dragged = false
+  if (e.pointerType === 'mouse') return
+  longPressed = false
+  pressStart = { x: e.clientX, y: e.clientY }
+  clearTimeout(pressTimer)
+  pressTimer = setTimeout(() => {
+    longPressed = true
+    navigator.vibrate?.(15)
+    mail.toggleSelect(props.message.uid)
+  }, 450)
+}
+function onPointermove(e) {
+  swipe.onPointermove(e)
+  if (pressStart && Math.hypot(e.clientX - pressStart.x, e.clientY - pressStart.y) > 8) {
+    clearTimeout(pressTimer)
+    dragged = true
+  }
+}
+function onPointerup(e) {
+  clearTimeout(pressTimer)
+  swipe.onPointerup(e)
+}
+function onPointercancel(e) {
+  clearTimeout(pressTimer)
+  swipe.onPointercancel(e)
+}
+function onClick() {
+  // The click that ends a long press or a swipe is not a tap.
+  if (longPressed) {
+    longPressed = false
+    return
+  }
+  if (dragged || Math.abs(offset.value) > 4 || flying.value) {
+    dragged = false
+    return
+  }
+  if (mail.selecting) mail.toggleSelect(props.message.uid)
+  else emit('open', props.message)
+}
 </script>
 
 <template>
@@ -79,24 +130,46 @@ function quick(action) {
 
     <!-- The row itself -->
     <div
-      v-bind="handlers"
       role="button"
       tabindex="0"
-      class="group relative flex gap-3 bg-surface px-4 touch-pan-y cursor-pointer"
+      :aria-pressed="mail.selecting ? selected : undefined"
+      class="group relative flex gap-3 px-4 touch-pan-y cursor-pointer"
       :class="[
         compact ? 'py-2' : 'py-3',
-        active ? 'bg-accent-soft' : 'hover:bg-sunken/60',
+        selected || active ? 'bg-accent-soft' : 'bg-surface hover:bg-sunken/60',
         !dragging ? 'transition-transform duration-200 ease-out' : '',
       ]"
       :style="{ transform: `translateX(${offset}px)` }"
-      @click="emit('open', message)"
-      @keydown.enter="emit('open', message)"
+      @pointerdown="onPointerdown"
+      @pointermove="onPointermove"
+      @pointerup="onPointerup"
+      @pointercancel="onPointercancel"
+      @click="onClick"
+      @keydown.enter="onClick"
+      @keydown.space.prevent="mail.toggleSelect(message.uid)"
     >
-      <span
+      <!-- Avatar doubles as the select checkbox (click it on desktop, long press on touch) -->
+      <button
         v-if="!compact"
-        class="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
-        :style="{ background: avatarColor(person?.email) }"
-      >{{ initials(person) }}</span>
+        type="button"
+        class="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white transition"
+        :style="{ background: selected ? 'var(--color-accent)' : avatarColor(person?.email) }"
+        :aria-label="t('list.select')"
+        @click.stop="mail.toggleSelect(message.uid)"
+      >
+        <AppIcon v-if="selected" name="check" :size="20" />
+        <span v-else>{{ initials(person) }}</span>
+      </button>
+      <button
+        v-else
+        type="button"
+        class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md ring-1 transition"
+        :class="selected ? 'bg-accent text-white ring-accent' : 'text-transparent ring-line group-hover:ring-muted'"
+        :aria-label="t('list.select')"
+        @click.stop="mail.toggleSelect(message.uid)"
+      >
+        <AppIcon name="check" :size="14" />
+      </button>
 
       <div class="min-w-0 flex-1">
         <div class="flex items-baseline gap-2">
@@ -115,6 +188,7 @@ function quick(action) {
         <div class="flex items-center gap-2">
           <span class="truncate text-[14px]" :class="message.seen ? 'text-muted' : 'text-ink'">
             {{ message.subject || t('list.noSubject') }}
+            <span v-if="compact && message.snippet" class="text-muted"> – {{ message.snippet }}</span>
           </span>
           <span class="ml-auto flex shrink-0 items-center gap-1 text-muted">
             <AppIcon v-if="message.answered" name="reply" :size="14" />
@@ -122,10 +196,11 @@ function quick(action) {
             <AppIcon v-if="message.flagged" name="flag" :size="15" class="text-flag fill-current" />
           </span>
         </div>
+        <p v-if="!compact && message.snippet" class="truncate text-[13px] text-muted">{{ message.snippet }}</p>
       </div>
 
       <!-- Hover actions on desktop -->
-      <div class="absolute right-3 top-1/2 hidden -translate-y-1/2 gap-1 rounded-lg bg-surface p-1 shadow-sm ring-1 ring-line [@media(hover:hover)]:group-hover:flex">
+      <div v-if="!mail.selecting" class="absolute right-3 top-1/2 hidden -translate-y-1/2 gap-1 rounded-lg bg-surface p-1 shadow-sm ring-1 ring-line [@media(hover:hover)]:group-hover:flex">
         <button class="rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.archive')" @click.stop="quick('archive')">
           <AppIcon name="archive" :size="18" />
         </button>

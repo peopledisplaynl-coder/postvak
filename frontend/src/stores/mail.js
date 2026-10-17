@@ -25,6 +25,7 @@ export const useMail = defineStore('mail', {
     loadingMore: false,
     search: '',
     openUid: null,
+    selected: [],         // uids of selected messages (multi-select)
     pending: new Map(),   // key -> { timer, commit }
   }),
 
@@ -38,6 +39,8 @@ export const useMail = defineStore('mail', {
       return this.currentFolder?.role ?? null
     },
     sort: () => useSession().settings.sort ?? 'date_desc',
+    selecting: (s) => s.selected.length > 0,
+    selectedMessages: (s) => s.messages.filter((m) => s.selected.includes(m.uid)),
   },
 
   actions: {
@@ -49,6 +52,7 @@ export const useMail = defineStore('mail', {
         this.messages = []
         this.total = 0
         this.openUid = null
+        this.selected = []
       }
       await Promise.all([this.loadFolders(), this.loadMessages()])
     },
@@ -103,81 +107,173 @@ export const useMail = defineStore('mail', {
 
     /** Run a swipe/toolbar action on a message: archive, trash, read, flag. */
     async act(action, message) {
-      const session = useSession()
       if (action === 'none') return
       if (action === 'read') return this.setFlag(message, 'seen', !message.seen)
       if (action === 'flag') return this.setFlag(message, 'flagged', !message.flagged)
+      return this.removeAction(action, [message])
+    },
 
+    /** Archive or delete (to trash, or permanently when already in trash) with undo. */
+    removeAction(action, messages) {
+      const session = useSession()
       const inTrash = this.folderRole === 'trash'
-      if (action === 'trash' && (session.settings.confirm_delete || inTrash)) {
-        if (!confirm(inTrash ? t('actions.deleteForever') + '?' : t('actions.trash') + '?')) return false
-      }
       if (action === 'archive' && this.folderRole === 'archive') return false
-
-      this.removeWithUndo(message, action, inTrash && action === 'trash')
+      if (action === 'trash' && (session.settings.confirm_delete || inTrash)) {
+        const question = inTrash ? t('actions.deleteForever') : t('actions.trash')
+        if (!confirm(messages.length > 1 ? `${question}: ${messages.length}?` : `${question}?`)) return false
+      }
+      const permanent = inTrash && action === 'trash'
+      const n = messages.length
+      const label = permanent
+        ? t(n > 1 ? 'toast.deletedMany' : 'toast.deleted', { n })
+        : t(action === 'archive' ? (n > 1 ? 'toast.archivedMany' : 'toast.archived') : (n > 1 ? 'toast.trashedMany' : 'toast.trashed'), { n })
+      this.removeManyWithUndo(messages, action, label)
       return true
     },
 
-    removeWithUndo(message, target, permanent) {
+    /** Move messages to any folder path, with undo. */
+    moveTo(messages, targetPath, folderName) {
+      if (targetPath === this.folderPath) return false
+      const n = messages.length
+      this.removeManyWithUndo(messages, targetPath, t(n > 1 ? 'toast.movedMany' : 'toast.moved', { n, folder: folderName }))
+      return true
+    },
+
+    /**
+     * Remove messages from the list right away; the server call happens when the undo
+     * window ends (one request for all of them). Undo puts them back where they were.
+     */
+    removeManyWithUndo(messages, target, label) {
       const toasts = useToasts()
       const accountId = this.accountId
       const folder = this.folderPath
-      const index = this.messages.findIndex((m) => m.uid === message.uid)
-      if (index === -1) return
 
-      this.messages.splice(index, 1)
-      this.total = Math.max(0, this.total - 1)
-      if (this.openUid === message.uid) this.openUid = null
+      const removed = messages
+        .map((message) => ({ message, index: this.messages.findIndex((m) => m.uid === message.uid) }))
+        .filter((r) => r.index !== -1)
+        .sort((a, b) => a.index - b.index)
+      if (!removed.length) return
 
-      const key = `${accountId}:${folder}:${message.uid}`
-      const commit = async (keepalive = false) => {
-        this.pending.delete(key)
+      for (const r of [...removed].reverse()) this.messages.splice(r.index, 1)
+      this.total = Math.max(0, this.total - removed.length)
+      const uids = removed.map((r) => r.message.uid)
+      if (uids.includes(this.openUid)) this.openUid = null
+      this.selected = this.selected.filter((u) => !uids.includes(u))
+
+      const keys = uids.map((uid) => `${accountId}:${folder}:${uid}`)
+      const batch = { done: false, timer: null }
+      const finish = () => {
+        batch.done = true
+        clearTimeout(batch.timer)
+        keys.forEach((k) => this.pending.delete(k))
+      }
+      batch.commit = async (keepalive = false) => {
+        if (batch.done) return
+        finish()
         try {
-          await api.post(`/accounts/${accountId}/move`, { folder, uids: [message.uid], target }, { keepalive })
+          await api.post(`/accounts/${accountId}/move`, { folder, uids, target }, { keepalive })
           this.loadFolders(accountId)
         } catch (e) {
           toasts.error(t('toast.failed', { msg: e.message }))
-          this.restore(message, index, accountId, folder)
+          this.restore(removed, accountId, folder)
         }
       }
 
       const seconds = Number(useSession().settings.undo_seconds ?? 5)
       if (seconds === 0) {
-        commit()
+        batch.commit()
       } else {
-        const timer = setTimeout(commit, seconds * 1000)
-        this.pending.set(key, { timer, commit })
+        batch.timer = setTimeout(() => batch.commit(), seconds * 1000)
+        keys.forEach((k) => this.pending.set(k, batch))
       }
 
-      const label = permanent ? t('toast.deleted') : target === 'archive' ? t('toast.archived') : t('toast.trashed')
       toasts.show(label, {
         seconds: seconds || 3,
         action: seconds ? {
           label: t('actions.undo'),
           run: () => {
-            const p = this.pending.get(key)
-            if (!p) return
-            clearTimeout(p.timer)
-            this.pending.delete(key)
-            this.restore(message, index, accountId, folder)
+            if (batch.done) return
+            finish()
+            this.restore(removed, accountId, folder)
           },
         } : null,
       })
     },
 
-    restore(message, index, accountId, folder) {
+    /** Put removed messages back at their old positions. */
+    restore(removed, accountId, folder) {
       if (this.accountId !== accountId || this.folderPath !== folder) return
-      if (this.messages.some((m) => m.uid === message.uid)) return
-      this.messages.splice(Math.min(index, this.messages.length), 0, message)
-      this.total++
+      for (const { message, index } of removed) {
+        if (this.messages.some((m) => m.uid === message.uid)) continue
+        this.messages.splice(Math.min(index, this.messages.length), 0, message)
+        this.total++
+      }
     },
 
     /** Called on page unload: send everything that is still waiting. */
     flushPending() {
-      for (const { timer, commit } of this.pending.values()) {
-        clearTimeout(timer)
-        commit(true)
+      for (const batch of new Set(this.pending.values())) batch.commit(true)
+    },
+
+    // ---------------------------------------------------------------- selection
+
+    toggleSelect(uid) {
+      this.selected = this.selected.includes(uid) ? this.selected.filter((u) => u !== uid) : [...this.selected, uid]
+    },
+
+    selectAll() {
+      this.selected = this.messages.map((m) => m.uid)
+    },
+
+    clearSelection() {
+      this.selected = []
+    },
+
+    /** Toolbar action on all selected messages. */
+    async bulk(action) {
+      const messages = this.selectedMessages
+      if (!messages.length) return
+      if (action === 'archive' || action === 'trash') {
+        this.removeAction(action, messages)
+        return
       }
+      const flag = action === 'read' ? 'seen' : 'flagged'
+      // Mark all as read unless they already are; same for the star.
+      const value = !messages.every((m) => m[flag])
+      await this.setFlagMany(messages, flag, value)
+      this.clearSelection()
+    },
+
+    async setFlagMany(messages, flag, value) {
+      const before = messages.map((m) => m[flag])
+      const changed = messages.filter((m) => m[flag] !== value)
+      messages.forEach((m) => (m[flag] = value))
+      try {
+        await api.post(`/accounts/${this.accountId}/flags`, { folder: this.folderPath, uids: messages.map((m) => m.uid), [flag]: value })
+        if (flag === 'seen') this.adjustUnseen(value ? -changed.length : changed.length)
+      } catch (e) {
+        messages.forEach((m, i) => (m[flag] = before[i]))
+        useToasts().error(t('toast.failed', { msg: e.message }))
+      }
+    },
+
+    // ------------------------------------------------------------------ folders
+
+    async createFolder(name, parent = null) {
+      const res = await api.post(`/accounts/${this.accountId}/folders`, { name, parent })
+      this.folders[this.accountId] = res.folders
+      return res.path
+    },
+
+    async renameFolder(path, name) {
+      const res = await api.patch(`/accounts/${this.accountId}/folders`, { path, name })
+      this.folders[this.accountId] = res.folders
+      return res.path
+    },
+
+    async deleteFolder(path) {
+      const res = await api.del(`/accounts/${this.accountId}/folders?path=${encodeURIComponent(path)}`)
+      if (res?.folders) this.folders[this.accountId] = res.folders
     },
 
     async setFlag(message, flag, value) {

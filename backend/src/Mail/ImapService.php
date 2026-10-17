@@ -11,6 +11,8 @@ use Webklex\PHPIMAP\ClientManager;
 use Webklex\PHPIMAP\Exceptions\AuthFailedException;
 use Webklex\PHPIMAP\Exceptions\ConnectionFailedException;
 use Webklex\PHPIMAP\Folder;
+use Webklex\PHPIMAP\Header;
+use Webklex\PHPIMAP\IMAP;
 use Webklex\PHPIMAP\Message;
 
 /**
@@ -110,28 +112,135 @@ final class ImapService
 
     // ----------------------------------------------------------------- messages
 
+    /** Sort orders a user can choose, mapped to IMAP SORT criteria (RFC 5256). */
+    public const SORTS = [
+        'date_desc'    => '(REVERSE DATE)',
+        'date_asc'     => '(DATE)',
+        'from'         => '(FROM)',
+        'subject'      => '(SUBJECT)',
+        'size_desc'    => '(REVERSE SIZE)',
+    ];
+
     /**
-     * One page of message summaries, newest first.
-     * @return array{total:int, page:int, per_page:int, messages:array}
+     * One page of message summaries in the requested order.
+     *
+     * The server sorts (IMAP SORT), so the order is correct for the whole folder,
+     * not just for the page. Only the headers and flags of the messages on this
+     * page are fetched.
+     *
+     * @return array{total:int, page:int, per_page:int, sort:string, messages:array}
      */
-    public function listMessages(string $folderPath, int $page = 1, int $perPage = 50, ?string $search = null): array
+    public function listMessages(string $folderPath, int $page = 1, int $perPage = 50, ?string $search = null, string $sort = 'date_desc'): array
     {
         $folder = $this->folder($folderPath);
+        $this->client->openFolder($folder->path, true);
+        $sort = isset(self::SORTS[$sort]) ? $sort : 'date_desc';
 
-        $base = static function () use ($folder, $search) {
-            $q = $folder->query()->setFetchBody(false)->setFetchFlags(true)->leaveUnread();
-            return ($search !== null && $search !== '') ? $q->whereText($search) : $q->whereAll();
-        };
+        $uids = $this->sortedUids($sort, $search);
+        $total = count($uids);
+        $pageUids = array_slice($uids, ($page - 1) * $perPage, $perPage);
 
-        $total = $base()->count();
-        $messages = $base()->setFetchOrder('desc')->limit($perPage, $page)->get();
-
-        $out = [];
-        foreach ($messages as $message) {
-            $out[] = $this->summary($message, $folderPath);
+        $messages = [];
+        if ($pageUids !== []) {
+            $conn = $this->client->getConnection();
+            $headers = $conn->headers($pageUids, 'RFC822', IMAP::ST_UID)->validatedData();
+            $flags = $conn->flags($pageUids, IMAP::ST_UID)->validatedData();
+            foreach ($pageUids as $uid) {
+                if (!isset($headers[$uid])) {
+                    continue; // deleted in the meantime
+                }
+                $messages[] = $this->summaryFromHeader($uid, (string) $headers[$uid], (array) ($flags[$uid] ?? []), $folderPath);
+            }
         }
 
-        return ['total' => $total, 'page' => $page, 'per_page' => $perPage, 'messages' => $out];
+        return ['total' => $total, 'page' => $page, 'per_page' => $perPage, 'sort' => $sort, 'messages' => $messages];
+    }
+
+    /** All matching UIDs in the requested order. Falls back to UID order if the server lacks SORT. */
+    private function sortedUids(string $sort, ?string $search): array
+    {
+        $conn = $this->client->getConnection();
+        $criteria = $this->searchCriteria($search);
+
+        try {
+            $response = $conn->requestAndResponse('UID SORT', [self::SORTS[$sort], 'UTF-8', ...$criteria]);
+            foreach ($response->data() as $line) {
+                if (is_array($line) && ($line[0] ?? null) === 'SORT') {
+                    return array_map('intval', array_slice($line, 1));
+                }
+            }
+            return [];
+        } catch (Throwable $e) {
+            error_log('[postvak] SORT not available, falling back to SEARCH: ' . $e->getMessage());
+        }
+
+        $ids = $conn->search(['CHARSET', 'UTF-8', ...$criteria], IMAP::ST_UID)->validatedData();
+        $ids = array_map('intval', is_array($ids) ? $ids : []);
+        $sort === 'date_asc' ? sort($ids) : rsort($ids); // UID order approximates arrival order
+        return $ids;
+    }
+
+    /** IMAP search criteria: everything, or the text in sender, recipient or subject. */
+    private function searchCriteria(?string $search): array
+    {
+        $search = trim((string) $search);
+        if ($search === '') {
+            return ['ALL'];
+        }
+        $q = $this->imapString($search);
+        return ['OR', 'OR', 'FROM', $q, 'TO', $q, 'SUBJECT', $q];
+    }
+
+    /** Quoted string for plain ASCII, literal {n} for anything else (UTF-8). */
+    private function imapString(string $value): string|array
+    {
+        $value = str_replace(["\r", "\n"], ' ', $value);
+        if (preg_match('/^[\x20-\x7e]*$/', $value)) {
+            return '"' . str_replace(['\\', '"'], ['\\\\', '\\"'], $value) . '"';
+        }
+        return ['{' . strlen($value) . '}', $value];
+    }
+
+    private function summaryFromHeader(int $uid, string $rawHeader, array $rawFlags, string $folderPath): array
+    {
+        $flags = [];
+        array_walk_recursive($rawFlags, static function ($f) use (&$flags) {
+            $flags[strtolower(ltrim((string) $f, '\\'))] = true;
+        });
+
+        $subject = '';
+        $from = null;
+        $to = [];
+        $date = null;
+        $contentType = '';
+        try {
+            $header = new Header($rawHeader, $this->client->getConfig());
+            $subject = (string) $header->get('subject');
+            $first = $header->get('from')->first();
+            $from = is_object($first) && isset($first->mail) ? ['name' => $first->personal, 'email' => $first->mail] : null;
+            $to = self::addresses($header->get('to'));
+            $contentType = strtolower((string) $header->get('content_type'));
+            try {
+                $date = $header->get('date')->toDate()->toIso8601String();
+            } catch (Throwable) {
+            }
+        } catch (Throwable $e) {
+            error_log("[postvak] could not parse header of uid $uid: " . $e->getMessage());
+        }
+
+        return [
+            'uid'             => $uid,
+            'folder'          => $folderPath,
+            'subject'         => $subject,
+            'from'            => $from,
+            'to'              => $to,
+            'date'            => $date,
+            'seen'            => isset($flags['seen']),
+            'flagged'         => isset($flags['flagged']),
+            'answered'        => isset($flags['answered']),
+            // Without fetching the body, multipart/mixed is a good indication of attachments.
+            'has_attachments' => str_contains($contentType, 'multipart/mixed'),
+        ];
     }
 
     /** Full message with headers, body and attachment list. */
@@ -226,32 +335,6 @@ final class ImapService
             }
         }
         return false;
-    }
-
-    private function summary(Message $m, string $folderPath): array
-    {
-        $flags = $m->getFlags();
-        $from = $m->getFrom()->first();
-        $date = null;
-        try {
-            $date = $m->getDate()->toDate()->toIso8601String();
-        } catch (Throwable) {
-        }
-        $contentType = strtolower((string) $m->getHeader()?->get('content_type'));
-
-        return [
-            'uid'             => (int) $m->getUid(),
-            'folder'          => $folderPath,
-            'subject'         => (string) $m->getSubject(),
-            'from'            => $from ? ['name' => $from->personal, 'email' => $from->mail] : null,
-            'to'              => self::addresses($m->getTo()),
-            'date'            => $date,
-            'seen'            => $flags->has('seen'),
-            'flagged'         => $flags->has('flagged'),
-            'answered'        => $flags->has('answered'),
-            // Without fetching the body, multipart/mixed is a good indication of attachments.
-            'has_attachments' => str_contains($contentType, 'multipart/mixed'),
-        ];
     }
 
     /** @return array<int, array{name:string, email:string}> */

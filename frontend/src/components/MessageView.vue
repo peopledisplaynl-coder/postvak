@@ -22,7 +22,7 @@ const frame = ref(null)
 const frameHeight = ref(200)
 
 const summary = computed(() => mail.messages.find((m) => m.uid === props.uid))
-const attachments = computed(() => message.value?.attachments.filter((a) => !a.inline) ?? [])
+const attachments = computed(() => (message.value?.attachments ?? []).filter((a) => !a.inline))
 
 async function load(images = false) {
   if (!props.uid) {
@@ -134,8 +134,8 @@ watch(srcdoc, () => nextTick(() => (frameHeight.value = 200)))
               <span v-if="message.from?.name" class="text-muted"> &lt;{{ message.from.email }}&gt;</span>
             </p>
             <p class="truncate text-muted">
-              {{ t('reader.to') }} {{ message.to.map(displayName).join(', ') }}
-              <template v-if="message.cc.length">, {{ t('reader.cc') }} {{ message.cc.map(displayName).join(', ') }}</template>
+              {{ t('reader.to') }} {{ (message.to ?? []).map(displayName).join(', ') }}
+              <template v-if="message.cc?.length">, {{ t('reader.cc') }} {{ message.cc.map(displayName).join(', ') }}</template>
             </p>
             <p class="text-muted">{{ fullDate(message.date) }}</p>
           </div>
@@ -177,7 +177,7 @@ watch(srcdoc, () => nextTick(() => (frameHeight.value = 200)))
           <button class="flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-medium hover:bg-sunken" @click="reply('reply')">
             <AppIcon name="reply" :size="18" /> {{ t('actions.reply') }}
           </button>
-          <button v-if="message.to.length + message.cc.length > 1" class="flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-medium hover:bg-sunken" @click="reply('replyAll')">
+          <button v-if="message.to.length + message.cc?.length > 1" class="flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-medium hover:bg-sunken" @click="reply('replyAll')">
             <AppIcon name="replyAll" :size="18" /> {{ t('actions.replyAll') }}
           </button>
           <button class="flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-medium hover:bg-sunken" @click="reply('forward')">

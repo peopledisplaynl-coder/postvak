@@ -58,6 +58,14 @@ async function onTouchEnd() {
   pullStart = null
 }
 
+// ---- sorting
+const sortOpen = ref(false)
+const sortKeys = ['date_desc', 'date_asc', 'from', 'subject', 'size_desc']
+function chooseSort(key) {
+  sortOpen.value = false
+  if (key !== mail.sort) mail.setSort(key)
+}
+
 const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.empty')))
 </script>
 
@@ -72,6 +80,32 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :aria-label="t('list.search')" @click="searching = true">
           <AppIcon name="search" />
         </button>
+        <div class="relative">
+          <button
+            class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink"
+            :aria-label="t('list.sort')"
+            :title="t(`list.sortOptions.${mail.sort}`)"
+            :aria-expanded="sortOpen"
+            @click="sortOpen = !sortOpen"
+          >
+            <AppIcon name="sort" />
+          </button>
+          <div v-if="sortOpen" class="fixed inset-0 z-20" @click="sortOpen = false" />
+          <ul v-if="sortOpen" class="absolute right-0 z-30 mt-1 w-52 overflow-hidden rounded-xl bg-surface py-1 shadow-lg ring-1 ring-line" role="menu">
+            <li v-for="key in sortKeys" :key="key">
+              <button
+                role="menuitemradio"
+                :aria-checked="mail.sort === key"
+                class="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-sunken"
+                :class="mail.sort === key ? 'font-medium text-accent' : ''"
+                @click="chooseSort(key)"
+              >
+                {{ t(`list.sortOptions.${key}`) }}
+                <span v-if="mail.sort === key">✓</span>
+              </button>
+            </li>
+          </ul>
+        </div>
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :aria-label="t('list.refresh')" @click="mail.loadMessages()">
           <AppIcon name="refresh" :class="mail.loading ? 'animate-spin' : ''" />
         </button>

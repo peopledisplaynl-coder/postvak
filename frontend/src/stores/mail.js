@@ -37,6 +37,7 @@ export const useMail = defineStore('mail', {
     folderRole() {
       return this.currentFolder?.role ?? null
     },
+    sort: () => useSession().settings.sort ?? 'date_desc',
   },
 
   actions: {
@@ -54,7 +55,8 @@ export const useMail = defineStore('mail', {
 
     async loadFolders(accountId = this.accountId) {
       try {
-        this.folders[accountId] = await api.get(`/accounts/${accountId}/folders`)
+        const folders = await api.get(`/accounts/${accountId}/folders`)
+        if (Array.isArray(folders)) this.folders[accountId] = folders
       } catch (e) {
         useToasts().error(t('toast.failed', { msg: e.message }))
       }
@@ -65,14 +67,14 @@ export const useMail = defineStore('mail', {
       const requested = `${this.accountId}:${this.folderPath}:${this.search}`
       try {
         const data = await api.get(`/accounts/${this.accountId}/messages`, {
-          folder: this.folderPath, page: 1, per_page: PER_PAGE, q: this.search,
+          folder: this.folderPath, page: 1, per_page: PER_PAGE, q: this.search, sort: this.sort,
         })
         // Ignore the answer if the user switched folder in the meantime.
         if (requested !== `${this.accountId}:${this.folderPath}:${this.search}`) return
         // Do not resurrect messages that are waiting to be archived/deleted.
         const pendingUids = new Set([...this.pending.keys()].map((k) => k.split(':').pop()))
-        this.messages = data.messages.filter((m) => !pendingUids.has(String(m.uid)))
-        this.total = data.total
+        this.messages = (data?.messages ?? []).filter((m) => !pendingUids.has(String(m.uid)))
+        this.total = data?.total ?? this.messages.length
         this.page = 1
       } catch (e) {
         if (!silent) useToasts().error(t('toast.failed', { msg: e.message }))
@@ -86,12 +88,14 @@ export const useMail = defineStore('mail', {
       this.loadingMore = true
       try {
         const data = await api.get(`/accounts/${this.accountId}/messages`, {
-          folder: this.folderPath, page: this.page + 1, per_page: PER_PAGE, q: this.search,
+          folder: this.folderPath, page: this.page + 1, per_page: PER_PAGE, q: this.search, sort: this.sort,
         })
         const known = new Set(this.messages.map((m) => m.uid))
-        this.messages.push(...data.messages.filter((m) => !known.has(m.uid)))
+        this.messages.push(...(data?.messages ?? []).filter((m) => !known.has(m.uid)))
         this.page = data.page
         this.total = data.total
+      } catch (e) {
+        useToasts().error(t('toast.failed', { msg: e.message }))
       } finally {
         this.loadingMore = false
       }
@@ -191,6 +195,11 @@ export const useMail = defineStore('mail', {
     adjustUnseen(delta) {
       const f = this.currentFolder
       if (f && f.unseen !== null) f.unseen = Math.max(0, f.unseen + delta)
+    },
+
+    async setSort(sort) {
+      await useSession().updateSettings({ sort })
+      await this.loadMessages()
     },
 
     async fetchMessage(uid, { images = false } = {}) {

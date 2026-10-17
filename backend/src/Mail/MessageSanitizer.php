@@ -66,10 +66,28 @@ final class MessageSanitizer
 
         /** @var DOMElement $img */
         foreach (iterator_to_array($doc->getElementsByTagName('img')) as $img) {
-            $src = $img->getAttribute('src');
-            if (preg_match('~^https?://~i', $src) && !$allowRemote) {
+            $src = trim($img->getAttribute('src'));
+            if (str_starts_with($src, '//')) {
+                $src = 'https:' . $src; // protocol-relative: would resolve wrongly in the reader
+                $img->setAttribute('src', $src);
+            }
+            $isRemote = (bool) preg_match('~^https?://~i', $src);
+            if ($isRemote && !$allowRemote) {
                 $img->setAttribute('data-blocked-src', $src);
                 $img->removeAttribute('src');
+                $img->removeAttribute('srcset');
+                $blocked++;
+            } elseif ($src === '' || $src === 'about:blank') {
+                $img->parentNode?->removeChild($img); // missing inline image: drop instead of a broken icon
+            }
+        }
+
+        // Legacy background="..." attributes on tables and cells.
+        $xpathBg = new \DOMXPath($doc);
+        foreach ($xpathBg->query('//*[@background]') ?: [] as $el) {
+            /** @var DOMElement $el */
+            if (!$allowRemote) {
+                $el->removeAttribute('background');
                 $blocked++;
             }
         }

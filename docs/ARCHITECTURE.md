@@ -37,7 +37,10 @@ users, linked accounts, preferences and contacts.
    checks the CSRF header for state-changing requests and dispatches through `routes.php`.
 3. Mail controllers load the account (scoped to the logged-in user), decrypt its password,
    open an IMAP connection for this request only, and close it at the end.
-4. `session_write_close()` is called before IMAP work so parallel requests from the same user
+4. Every response is valid JSON: stray output is buffered and discarded, library deprecation
+   notices are only logged, and fatal errors (timeouts, memory) are turned into a JSON error by a
+   shutdown handler. The frontend calls the API with an absolute path (`/api/...`).
+5. `session_write_close()` is called before IMAP work so parallel requests from the same user
    (folder counts + message list) do not block on the session lock.
 
 ## Authentication
@@ -83,7 +86,7 @@ All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` b
 | GET / POST | `/accounts` | List / add account (verified first) |
 | PATCH / DELETE | `/accounts/{id}` | Edit (name, colour, signature, folders, server, password) / remove |
 | GET | `/accounts/{id}/folders` | Folders with unseen/total counts and detected role |
-| GET | `/accounts/{id}/messages?folder=&page=&per_page=&q=` | Message summaries, newest first |
+| GET | `/accounts/{id}/messages?folder=&page=&per_page=&q=&sort=` | Message summaries; `sort` = `date_desc` (default), `date_asc`, `from`, `subject`, `size_desc`. Sorted by the server (IMAP SORT), searched in from/to/subject |
 | GET | `/accounts/{id}/messages/{uid}?folder=&images=1` | Full message, sanitised |
 | GET | `/accounts/{id}/messages/{uid}/attachments/{index}?folder=` | Download |
 | POST | `/accounts/{id}/move` | `{folder, uids, target: archive\|trash\|junk\|inbox\|<path>}` |

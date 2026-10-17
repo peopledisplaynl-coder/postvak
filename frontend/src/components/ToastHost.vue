@@ -10,7 +10,7 @@ function run(toast) {
 </script>
 
 <template>
-  <div class="pb-safe pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col items-center gap-2 p-4 sm:items-start sm:pl-6" aria-live="polite">
+  <div class="pb-safe pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col items-center gap-2 p-4" aria-live="polite">
     <TransitionGroup
       enter-from-class="translate-y-3 opacity-0"
       leave-to-class="opacity-0"

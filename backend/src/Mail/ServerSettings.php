@@ -86,6 +86,9 @@ final class ServerSettings
      */
     public function assertSafeHosts(): void
     {
+        if (Config::get('allow_private_hosts', false)) {
+            return; // e.g. a mail server on the same machine or in the local network
+        }
         foreach ([$this->imapHost, $this->smtpHost] as $host) {
             if (!preg_match('/^[a-z0-9.-]+$/i', $host)) {
                 throw HttpException::badRequest('Invalid server name');

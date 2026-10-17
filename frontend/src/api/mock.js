@@ -13,7 +13,7 @@ const accounts = [
 let settings = {
   swipe_left: 'trash', swipe_right: 'archive', confirm_delete: false, undo_seconds: 5,
   theme: 'system', density: 'comfortable', show_images: 'ask', reading_pane: 'right',
-  poll_seconds: 60, unified_inbox: true, mark_read_on_open: true,
+  poll_seconds: 60, unified_inbox: true, mark_read_on_open: true, sort: 'date_desc',
 }
 
 const senders = [
@@ -91,6 +91,14 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
   if (sub === '/messages') {
     let list = box(id, query.folder || 'INBOX')
     if (query.q) list = list.filter((x) => (x.subject + x.from.name).toLowerCase().includes(query.q.toLowerCase()))
+    const by = {
+      date_desc: (a, b) => b.date.localeCompare(a.date),
+      date_asc: (a, b) => a.date.localeCompare(b.date),
+      from: (a, b) => a.from.name.localeCompare(b.from.name),
+      subject: (a, b) => a.subject.localeCompare(b.subject),
+      size_desc: (a, b) => b.uid - a.uid,
+    }
+    list = [...list].sort(by[query.sort] ?? by.date_desc)
     const page = Number(query.page || 1), per = Number(query.per_page || 50)
     return { total: list.length, page, per_page: per, messages: list.slice((page - 1) * per, page * per) }
   }

@@ -32,6 +32,7 @@ const paths = {
   chevron: 'M9 6l6 6-6 6',
   plus: 'M12 5v14M5 12h14',
   send: 'M5 12l14-7-5 14-3-6zM11 13l8-8',
+  sort: 'M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4',
 }
 </script>
 

@@ -36,6 +36,11 @@ async function remove(account) {
   }
 }
 
+async function logout() {
+  await session.logout()
+  router.push('/login')
+}
+
 const pollOptions = [30, 60, 120, 300, 600]
 </script>
 
@@ -97,6 +102,13 @@ const pollOptions = [30, 60, 120, 300, 600]
           <span>{{ t('settings.markReadOnOpen') }}</span>
           <input type="checkbox" class="size-5 accent-accent" :checked="session.settings.mark_read_on_open" @change="set('mark_read_on_open', $event.target.checked)" />
         </label>
+      </div>
+      <div v-if="tab === 'general'" class="mt-6 flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-line">
+        <span class="min-w-0 truncate text-muted">{{ session.user?.login_email }}</span>
+        <button class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 font-medium text-danger hover:bg-danger/10" @click="logout">
+          <AppIcon name="logout" :size="18" />
+          {{ t('actions.logout') }}
+        </button>
       </div>
 
       <!-- Swipe -->

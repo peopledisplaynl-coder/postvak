@@ -27,6 +27,7 @@ final class SettingsRepository
         'poll_seconds'     => 60,
         'unified_inbox'    => true,            // one inbox for all accounts
         'mark_read_on_open'=> true,
+        'sort'             => 'date_desc',     // date_desc | date_asc | from | subject | size_desc
     ];
 
     private const RULES = [
@@ -41,6 +42,7 @@ final class SettingsRepository
         'poll_seconds'      => ['int', 30, 900],
         'unified_inbox'     => ['bool'],
         'mark_read_on_open' => ['bool'],
+        'sort'              => ['enum', ['date_desc', 'date_asc', 'from', 'subject', 'size_desc']],
     ];
 
     public function get(int $userId): array

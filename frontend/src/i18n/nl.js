@@ -30,6 +30,14 @@ export default {
     refresh: 'Vernieuwen',
     loadMore: 'Meer laden',
     noSubject: '(geen onderwerp)',
+    sort: 'Sorteren',
+    sortOptions: {
+      date_desc: 'Nieuwste eerst',
+      date_asc: 'Oudste eerst',
+      from: 'Afzender (A-Z)',
+      subject: 'Onderwerp (A-Z)',
+      size_desc: 'Grootste eerst',
+    },
     me: 'ik',
   },
 

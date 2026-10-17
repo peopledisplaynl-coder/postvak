@@ -72,12 +72,13 @@ function go(accountId, path = 'INBOX') {
     </ul>
 
     <div class="flex items-center gap-1 border-t border-line px-2 py-2">
-      <router-link to="/settings" class="flex flex-1 items-center gap-3 rounded-xl px-3 py-2 hover:bg-sunken" @click="emit('navigate', null)">
+      <router-link to="/settings" class="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2 py-2 hover:bg-sunken" @click="emit('navigate', null)">
         <AppIcon name="settings" :size="19" />
         {{ t('actions.settings') }}
       </router-link>
-      <button class="rounded-xl p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.logout')" @click="session.logout().then(() => $router.push('/login'))">
+      <button class="flex shrink-0 items-center gap-2 rounded-xl px-2 py-2 text-muted hover:bg-sunken hover:text-ink" @click="session.logout().then(() => $router.push('/login'))">
         <AppIcon name="logout" :size="19" />
+        {{ t('actions.logout') }}
       </button>
     </div>
   </nav>

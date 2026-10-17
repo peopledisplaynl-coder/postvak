@@ -54,6 +54,10 @@ return [
         'validate_cert'   => true,
     ],
 
+    // Allow mail servers on private/local addresses (127.0.0.1, 192.168.x.x).
+    // Keep false on shared hosting; only needed when the mail server runs on your own network.
+    'allow_private_hosts' => false,
+
     // Optional: restrict who can log in. Empty array = any mailbox the IMAP server accepts.
     // Example: ['labee.eu', 'example.nl']
     'allowed_login_domains' => [],

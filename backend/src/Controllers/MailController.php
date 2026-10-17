@@ -33,15 +33,16 @@ final class MailController
         Response::json($imap->folders());
     }
 
-    /** GET /accounts/{id}/messages?folder=INBOX&page=1&per_page=50&q=search */
+    /** GET /accounts/{id}/messages?folder=INBOX&page=1&per_page=50&q=search&sort=date_desc */
     public function messages(Request $r): void
     {
         [, $imap] = $this->open($r);
         $page = max(1, (int) $r->query('page', 1));
         $perPage = min(100, max(10, (int) $r->query('per_page', 50)));
         $q = trim((string) $r->query('q', ''));
+        $sort = (string) $r->query('sort', 'date_desc');
 
-        Response::json($imap->listMessages($this->folderParam($r), $page, $perPage, $q === '' ? null : $q));
+        Response::json($imap->listMessages($this->folderParam($r), $page, $perPage, $q === '' ? null : $q, $sort));
     }
 
     /** GET /accounts/{id}/messages/{uid}?folder=INBOX&images=1 */
@@ -194,7 +195,7 @@ final class MailController
 
     private function present(array $account, string $folder, int $uid, Message $m, bool $allowImages): array
     {
-        $base = sprintf('api/accounts/%d/messages/%d/attachments', $account['id'], $uid);
+        $base = sprintf('/api/accounts/%d/messages/%d/attachments', $account['id'], $uid);
         $q = '?folder=' . rawurlencode($folder);
 
         $attachments = [];

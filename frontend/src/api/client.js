@@ -1,7 +1,8 @@
 import { mockRequest } from './mock.js'
 
 const USE_MOCK = import.meta.env.VITE_MOCK === 'true'
-const BASE = 'api'
+// Absolute path: a relative "api" would resolve to /mail/api/... on deeper pages.
+const BASE = `${import.meta.env.BASE_URL}api`.replace(/\/{2,}/g, '/')
 
 let csrfToken = null
 let onUnauthorized = () => {}
@@ -47,10 +48,18 @@ export async function request(method, path, { body, form, query, keepalive } = {
   }
 
   if (res.status === 204) return null
-  const data = await res.json().catch(() => ({}))
+  const text = await res.text()
+  let data
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    // The server sent something that is not JSON (PHP error page, timeout, proxy message).
+    console.error(`[postvak] ${method} ${path} → ${res.status}, invalid JSON:`, text.slice(0, 500))
+    throw new ApiError(res.status, `ongeldig antwoord van de server (${res.status})`)
+  }
   if (!res.ok) {
     if (res.status === 401 && path !== '/auth/login') onUnauthorized()
-    throw new ApiError(res.status, data.error || res.statusText)
+    throw new ApiError(res.status, data?.error || res.statusText)
   }
   return data
 }
@@ -65,5 +74,6 @@ export const api = {
 
 /** URL for attachments and inline images (relative to the app). */
 export function attachmentUrl(path) {
-  return path.startsWith('api/') ? path : `${BASE}/${path}`
+  if (path.startsWith('/')) return path
+  return path.startsWith('api/') ? `/${path}` : `${BASE}/${path}`
 }

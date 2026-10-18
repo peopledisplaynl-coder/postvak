@@ -19,6 +19,8 @@
   --color-danger: #D23F3F;
   --color-read: #3646D9;
   --color-flag: #C98A06;
+  --color-junk: #B4532A;
+  --color-snooze: #7A5AC8;
 }
 
 /* Dark tokens: same names, so components never need dark: variants for colour. */
@@ -35,6 +37,8 @@
   --color-danger: #EE6464;
   --color-read: #7D89F2;
   --color-flag: #E5A928;
+  --color-junk: #E07B4F;
+  --color-snooze: #A48BEA;
 }
 
 html,

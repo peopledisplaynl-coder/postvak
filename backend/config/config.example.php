@@ -67,4 +67,9 @@ return [
 
     // Maximum total attachment size when sending, in MB.
     'max_attachment_mb' => 20,
+
+    // Background jobs (notifications for new mail) run from cron.php; see docs/INSTALL.nl.md.
+    // Only if your host can call a URL but not run a PHP script: set a long random key here
+    // and let the host call https://your-postvak/api/cron?key=THAT-KEY every 5 minutes.
+    'cron_key' => '',
 ];

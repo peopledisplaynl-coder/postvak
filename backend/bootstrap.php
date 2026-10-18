@@ -71,7 +71,7 @@ $configFile = __DIR__ . '/config/config.php';
 if (!is_file($configFile)) {
     http_response_code(500);
     header('Content-Type: application/json');
-    echo json_encode(['error' => 'config/config.php missing. Copy config.example.php and fill it in.']);
+    echo json_encode(['error' => 'Postvak is not installed yet: open /install.php, or copy config/config.example.php to config/config.php and fill it in.']);
     exit;
 }
 

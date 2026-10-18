@@ -5,7 +5,7 @@ import AppIcon from '../components/AppIcon.vue'
 import { api } from '../api/client.js'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
-import { t } from '../i18n/index.js'
+import { t, locale } from '../i18n/index.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,7 +23,7 @@ const loading = ref(false)
 const busy = ref(false)
 
 const fail = (e) => toasts.error(t('toast.failed', { msg: e.message }))
-const date = (s) => (s ? new Date(s.replace(' ', 'T')).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }) : t('admin.never'))
+const date = (s) => (s ? new Date(s.replace(' ', 'T')).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' }) : t('admin.never'))
 
 async function load() {
   loading.value = true
@@ -59,6 +59,17 @@ async function migrate() {
 }
 
 // ---- users
+async function resetTwoFactor(u) {
+  if (!confirm(t('admin.confirmReset2fa', { email: u.login_email }))) return
+  try {
+    await api.post(`/admin/users/${u.id}/reset-2fa`)
+    u.two_factor = false
+    toasts.show(t('admin.reset2faDone'))
+  } catch (e) {
+    toasts.error(t('toast.failed', { msg: e.message }))
+  }
+}
+
 async function toggleBlock(u) {
   if (!u.blocked && !confirm(t('admin.confirmBlock', { email: u.login_email }))) return
   try {
@@ -115,6 +126,8 @@ async function saveSettings() {
     busy.value = false
   }
 }
+
+const cronOk = computed(() => !!overview.value?.cron && Date.parse(overview.value.cron.at) > Date.now() - 30 * 60 * 1000)
 </script>
 
 <template>
@@ -166,6 +179,28 @@ async function saveSettings() {
           </dl>
         </section>
 
+        <!-- Background jobs (cron) -->
+        <section>
+          <h2 class="mb-2 font-medium">{{ t('admin.cronTitle') }}</h2>
+          <div class="space-y-3 rounded-2xl bg-surface px-4 py-3 ring-1 ring-line">
+            <p class="flex items-center gap-2">
+              <span class="size-2.5 shrink-0 rounded-full" :class="cronOk ? 'bg-archive' : 'bg-flag'" />
+              <span>{{ overview.cron ? t('admin.cronLast', { date: new Date(overview.cron.at).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' }), ms: overview.cron.took_ms }) : t('admin.cronNever') }}</span>
+            </p>
+            <p class="text-sm text-muted">{{ overview.push_devices === 1 ? t('admin.cronDevicesOne') : t('admin.cronDevices', { n: overview.push_devices }) }}</p>
+            <details :open="!cronOk" class="text-sm">
+              <summary class="cursor-pointer font-medium text-accent">{{ t('admin.cronHowTo') }}</summary>
+              <ol class="mt-2 list-decimal space-y-1 pl-5 text-muted">
+                <li>{{ t('admin.cronStep1') }}</li>
+                <li>{{ t('admin.cronStep2') }}</li>
+                <li>{{ t('admin.cronStep3') }} <code class="rounded bg-sunken px-1.5 py-0.5 text-ink">*/5 * * * *</code></li>
+                <li>{{ t('admin.cronStep4') }}</li>
+              </ol>
+              <p class="mt-2 text-muted">{{ t('admin.cronUrl') }}</p>
+            </details>
+          </div>
+        </section>
+
         <section>
           <h2 class="mb-2 font-medium">{{ t('admin.mailServer') }}</h2>
           <ul class="divide-y divide-line rounded-2xl bg-surface ring-1 ring-line">
@@ -207,8 +242,10 @@ async function saveSettings() {
             <span class="min-w-0 truncate font-medium">{{ u.login_email }}</span>
             <span v-if="u.is_admin" class="rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent">{{ t('admin.adminBadge') }}</span>
             <span v-if="u.blocked" class="rounded-full bg-danger/15 px-2 py-0.5 text-xs text-danger">{{ t('admin.blockedBadge') }}</span>
+            <span v-if="u.two_factor" class="rounded-full bg-archive/15 px-2 py-0.5 text-xs text-archive">{{ t('admin.twoFactorBadge') }}</span>
             <div class="flex-1" />
             <template v-if="u.id !== session.user?.id">
+              <button v-if="u.two_factor" class="rounded-lg px-3 py-1.5 text-sm ring-1 ring-line hover:bg-sunken" @click="resetTwoFactor(u)">{{ t('admin.reset2fa') }}</button>
               <button class="rounded-lg px-3 py-1.5 text-sm ring-1 ring-line hover:bg-sunken" @click="toggleBlock(u)">{{ u.blocked ? t('admin.unblock') : t('admin.block') }}</button>
               <button class="rounded-lg px-3 py-1.5 text-sm text-danger hover:bg-danger/10" @click="removeUser(u)">{{ t('admin.removeUser') }}</button>
             </template>

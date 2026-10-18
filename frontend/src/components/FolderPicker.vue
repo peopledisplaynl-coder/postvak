@@ -7,7 +7,11 @@ import { folderLabel, folderIcon } from '../folders.js'
 import { t } from '../i18n/index.js'
 
 /** Choose a folder to move messages to. Emits pick({ path, label }). */
-const props = defineProps({ count: { type: Number, default: 1 } })
+const props = defineProps({
+  accountId: { type: [Number, String], required: true },
+  exclude: { type: String, default: '' },
+  count: { type: Number, default: 1 },
+})
 const emit = defineEmits(['pick', 'close'])
 
 const mail = useMail()
@@ -19,8 +23,8 @@ const busy = ref(false)
 const input = ref(null)
 
 const folders = computed(() =>
-  mail.currentFolders
-    .filter((f) => f.selectable && f.path !== mail.folderPath && f.role !== 'drafts')
+  (mail.folders[props.accountId] ?? [])
+    .filter((f) => f.selectable && f.path !== props.exclude && f.role !== 'drafts')
     .filter((f) => !filter.value || folderLabel(f).toLowerCase().includes(filter.value.toLowerCase()))
 )
 
@@ -35,7 +39,7 @@ async function create() {
   if (!name) return
   busy.value = true
   try {
-    const path = await mail.createFolder(name)
+    const path = await mail.createFolder(name, null, props.accountId)
     emit('pick', { path, label: name })
   } catch (e) {
     toasts.error(t('toast.failed', { msg: e.message }))

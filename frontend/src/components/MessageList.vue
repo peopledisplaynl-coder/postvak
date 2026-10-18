@@ -1,13 +1,14 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import AppIcon from './AppIcon.vue'
 import MessageRow from './MessageRow.vue'
 import FolderPicker from './FolderPicker.vue'
-import { useMail } from '../stores/mail.js'
+import { useMail, msgKey } from '../stores/mail.js'
+import { useToasts } from '../stores/toasts.js'
 import { t } from '../i18n/index.js'
 
 const props = defineProps({ title: { type: String, default: '' } })
-const emit = defineEmits(['open', 'menu'])
+const emit = defineEmits(['open', 'menu', 'shortcuts'])
 
 const mail = useMail()
 const scroller = ref(null)
@@ -34,6 +35,22 @@ watch(searchInput, (q) => {
     mail.loadMessages()
   }, 350)
 })
+const moreOpen = ref(false)
+const searchField = ref(null)
+
+function toggleSearchBody() {
+  mail.searchBody = !mail.searchBody
+  if (mail.search) mail.loadMessages()
+  searchField.value?.focus()
+}
+
+/** "/" shortcut: open the search field. */
+function openSearch() {
+  searching.value = true
+  nextTick(() => searchField.value?.focus())
+}
+defineExpose({ openSearch })
+
 function closeSearch() {
   searching.value = false
   if (searchInput.value) searchInput.value = ''
@@ -61,6 +78,17 @@ async function onTouchEnd() {
 
 // ---- multi-select
 const picking = ref(false)
+const pickAccount = ref(null)
+function startMove() {
+  // Moving works within one mailbox account.
+  const accounts = new Set(mail.selectedMessages.map((m) => m.account_id))
+  if (accounts.size > 1) {
+    useToasts().error(t('list.moveOneAccount'))
+    return
+  }
+  pickAccount.value = [...accounts][0]
+  picking.value = true
+}
 const allSeen = computed(() => mail.selectedMessages.every((m) => m.seen))
 function moveSelected({ path, label }) {
   picking.value = false
@@ -78,6 +106,18 @@ const sortKeys = ['date_desc', 'date_asc', 'from', 'subject', 'size_desc']
 function chooseSort(key) {
   sortOpen.value = false
   if (key !== mail.sort) mail.setSort(key)
+}
+
+// ---- empty trash / spam
+const emptyable = computed(() => !mail.unified && (mail.folderRole === 'trash' || mail.folderRole === 'junk'))
+const emptying = ref(false)
+async function emptyFolder() {
+  emptying.value = true
+  try {
+    await mail.emptyCurrentFolder()
+  } finally {
+    emptying.value = false
+  }
 }
 
 const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.empty')))
@@ -104,13 +144,27 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-danger" :title="t('actions.trash')" @click="mail.bulk('trash')">
           <AppIcon name="trash" />
         </button>
+        <button
+          v-if="!['sent', 'drafts', 'scheduled'].includes(mail.folderRole)"
+          class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink"
+          :title="mail.folderRole === 'junk' ? t('actions.notJunk') : t('actions.junk')"
+          @click="mail.bulk('junk')"
+        >
+          <AppIcon :name="mail.folderRole === 'junk' ? 'inbox' : 'junk'" />
+        </button>
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.read')" @click="mail.bulk('read')">
           <AppIcon :name="allSeen ? 'unread' : 'read'" />
         </button>
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.flag')" @click="mail.bulk('flag')">
           <AppIcon name="flag" />
         </button>
-        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.move')" @click="picking = true">
+        <button v-if="mail.folderRole === 'snoozed'" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.unsnooze')" @click="mail.bulk('unsnooze')">
+          <AppIcon name="inbox" />
+        </button>
+        <button v-if="!['drafts', 'sent', 'scheduled'].includes(mail.folderRole)" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.snooze')" @click="mail.bulk('snooze')">
+          <AppIcon name="clock" />
+        </button>
+        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.move')" @click="startMove">
           <AppIcon name="move" />
         </button>
       </template>
@@ -151,18 +205,40 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :aria-label="t('list.refresh')" @click="mail.loadMessages()">
           <AppIcon name="refresh" :class="mail.loading ? 'animate-spin' : ''" />
         </button>
+        <div class="relative">
+          <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :aria-label="t('list.more')" :aria-expanded="moreOpen" @click="moreOpen = !moreOpen">
+            <AppIcon name="more" />
+          </button>
+          <div v-if="moreOpen" class="fixed inset-0 z-20" @click="moreOpen = false" />
+          <div v-if="moreOpen" class="absolute right-0 z-30 mt-1 w-60 overflow-hidden rounded-xl bg-surface py-1 shadow-lg ring-1 ring-line" role="menu">
+            <button role="menuitem" class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-sunken" @click="moreOpen = false; mail.markAllRead()">
+              <AppIcon name="read" :size="18" class="text-muted" /> {{ t('list.markAllRead') }}
+            </button>
+            <button role="menuitem" class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-sunken" @click="moreOpen = false; emit('shortcuts')">
+              <AppIcon name="keyboard" :size="18" class="text-muted" /> {{ t('list.shortcuts') }}
+            </button>
+          </div>
+        </div>
       </template>
       <template v-else>
         <button class="rounded-lg p-2 text-muted hover:bg-sunken" :aria-label="t('actions.back')" @click="closeSearch">
           <AppIcon name="back" />
         </button>
         <input
+          ref="searchField"
           v-model="searchInput"
           type="search"
           :placeholder="t('list.search')"
           class="min-w-0 flex-1 rounded-lg bg-sunken px-3 py-2 outline-none placeholder:text-muted"
           autofocus
         />
+        <button
+          class="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 transition"
+          :class="mail.searchBody ? 'bg-accent-soft text-accent ring-accent/40' : 'text-muted ring-line hover:bg-sunken'"
+          :aria-pressed="mail.searchBody"
+          :title="t('list.searchBodyHint')"
+          @click="toggleSearchBody"
+        >{{ t('list.searchBody') }}</button>
       </template>
     </header>
 
@@ -180,6 +256,21 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
         <AppIcon name="refresh" :class="pull >= 48 ? 'animate-spin text-accent' : ''" :style="{ transform: `rotate(${pull * 3}deg)` }" />
       </div>
 
+      <!-- Trash / spam: empty the whole folder -->
+      <div
+        v-if="emptyable && mail.messages.length && !mail.search"
+        class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-sunken/60 px-4 py-2.5 text-sm"
+      >
+        <span class="min-w-0 flex-1 text-muted">{{ mail.folderRole === 'trash' ? t('list.trashHint') : t('list.junkHint') }}</span>
+        <button
+          class="shrink-0 rounded-lg px-2 py-1 font-medium text-danger hover:bg-danger/10 disabled:opacity-60"
+          :disabled="emptying"
+          @click="emptyFolder"
+        >
+          {{ mail.folderRole === 'trash' ? t('list.emptyTrash') : t('list.emptyJunk') }}
+        </button>
+      </div>
+
       <div v-if="mail.loading && !mail.messages.length" class="space-y-px">
         <div v-for="i in 8" :key="i" class="flex gap-3 px-4 py-3">
           <div class="size-10 animate-pulse rounded-full bg-sunken" />
@@ -195,9 +286,9 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
       <ul v-else class="divide-y divide-line/70">
         <MessageRow
           v-for="m in mail.messages"
-          :key="m.uid"
+          :key="msgKey(m)"
           :message="m"
-          :active="m.uid === mail.openUid"
+          :active="msgKey(m) === mail.openKey"
           @open="emit('open', $event)"
         />
       </ul>
@@ -206,6 +297,6 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
       <p v-if="mail.loadingMore" class="py-4 text-center text-sm text-muted">…</p>
     </div>
 
-    <FolderPicker v-if="picking" :count="mail.selected.length" @close="picking = false" @pick="moveSelected" />
+    <FolderPicker v-if="picking" :account-id="pickAccount" :exclude="mail.folderPath" :count="mail.selected.length" @close="picking = false" @pick="moveSelected" />
   </section>
 </template>

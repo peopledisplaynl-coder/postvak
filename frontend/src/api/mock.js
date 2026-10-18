@@ -1,13 +1,51 @@
 // Fake backend for "npm run dev:mock". Lets you work on the UI without PHP or a mail server.
 // Data lives in memory and resets on reload.
 
+// Dutch demo data for a Dutch browser, English otherwise (the README screenshots use the English set).
+const nl = typeof navigator !== 'undefined' && /^nl\b/i.test(navigator.language || '')
+const D = nl
+  ? {
+      me: 'Ton', meEmail: 'ton@example.nl', second: 'info@bandnaam.example', domain: 'example.nl',
+      senders: [
+        ['Marieke de Vries', 'marieke@voorbeeld.nl'], ['Camping De Heide', 'reserveringen@deheide.example'],
+        ['Hostingbedrijf', 'support@hosting.example'], ['Peter Janssen', 'peter.janssen@voorbeeld.nl'],
+        ['Repetitieruimte 013', 'planning@ruimte013.example'], ['Webwinkel', 'noreply@winkel.example'],
+        ['Gemeente', 'noreply@gemeente.example'], ['Sandra', 'sandra@voorbeeld.nl'],
+      ],
+      subjects: [
+        'Bevestiging van je reservering', 'Setlist zaterdag', 'Factuur oktober', 'Even bijpraten?',
+        'Je pakket is onderweg', 'Nieuwe repetitietijden', 'Foto’s van het optreden', 'Vraag over de hosting',
+        'Herinnering: afspraak', 'Uitnodiging verjaardag',
+      ],
+      snippets: ['Hoi Ton, zoals besproken stuur ik je hierbij de details voor zaterdag.', 'Je bestelling is verzonden en wordt morgen tussen 10:00 en 14:00 bezorgd.', 'Bedankt voor je bericht. We nemen zo snel mogelijk contact met je op.', 'Hierbij de foto’s van het optreden, groetjes!'],
+      body: (s) => `<p>Hoi Ton,</p><p>Dit is een voorbeeldbericht om de interface te testen. ${s.toLowerCase()}, zoals besproken.</p>`,
+      bye: 'Groet', attachment: 'overzicht.pdf',
+    }
+  : {
+      me: 'Sam', meEmail: 'sam@example.com', second: 'hello@theband.example', domain: 'example.com',
+      senders: [
+        ['Maria Lopez', 'maria@example.org'], ['Lakeside Campsite', 'bookings@lakeside.example'],
+        ['Hosting Support', 'support@hosting.example'], ['Peter Jansen', 'peter@example.org'],
+        ['Rehearsal Studio', 'planning@studio.example'], ['Web Shop', 'noreply@shop.example'],
+        ['City Council', 'noreply@council.example'], ['Sandra', 'sandra@example.org'],
+      ],
+      subjects: [
+        'Your booking is confirmed', 'Setlist for Saturday', 'Invoice October', 'Catch up soon?',
+        'Your parcel is on its way', 'New rehearsal times', 'Photos from the gig', 'Question about hosting',
+        'Reminder: appointment', 'Birthday invitation',
+      ],
+      snippets: ['Hi Sam, as discussed, here are the details for Saturday.', 'Your order has shipped and will arrive tomorrow between 10:00 and 14:00.', 'Thanks for your message. We will get back to you as soon as possible.', 'Here are the photos from the gig, enjoy!'],
+      body: (s) => `<p>Hi Sam,</p><p>This is a sample message for trying out the interface: ${s.toLowerCase()}, as discussed.</p>`,
+      bye: 'Best', attachment: 'overview.pdf',
+    }
+
 const accounts = [
-  { id: 1, email: 'ton@example.nl', display_name: 'Ton', color: '#3646D9', is_login: true, sort_order: 0,
-    imap_host: 'mail.example.nl', imap_port: 993, imap_encryption: 'ssl',
-    smtp_host: 'mail.example.nl', smtp_port: 465, smtp_encryption: 'ssl', username: 'ton@example.nl', signature_html: '' },
-  { id: 2, email: 'info@bandnaam.nl', display_name: 'Info', color: '#0F8A5F', is_login: false, sort_order: 1,
-    imap_host: 'mail.bandnaam.nl', imap_port: 993, imap_encryption: 'ssl',
-    smtp_host: 'mail.bandnaam.nl', smtp_port: 465, smtp_encryption: 'ssl', username: 'info@bandnaam.nl', signature_html: '' },
+  { id: 1, email: D.meEmail, display_name: D.me, color: '#3646D9', is_login: true, sort_order: 0,
+    imap_host: `mail.${D.domain}`, imap_port: 993, imap_encryption: 'ssl',
+    smtp_host: `mail.${D.domain}`, smtp_port: 465, smtp_encryption: 'ssl', username: D.meEmail, signature_html: '' },
+  { id: 2, email: D.second, display_name: 'Info', color: '#0F8A5F', is_login: false, sort_order: 1,
+    imap_host: 'mail.theband.example', imap_port: 993, imap_encryption: 'ssl',
+    smtp_host: 'mail.theband.example', smtp_port: 465, smtp_encryption: 'ssl', username: D.second, signature_html: '' },
 ]
 
 let settings = {
@@ -16,17 +54,12 @@ let settings = {
   poll_seconds: 60, unified_inbox: true, mark_read_on_open: true, sort: 'date_desc',
 }
 
-const senders = [
-  ['Marieke de Vries', 'marieke@voorbeeld.nl'], ['Camping De Heide', 'reserveringen@deheide.nl'],
-  ['Cloud86', 'support@cloud86.nl'], ['Peter Janssen', 'peter.janssen@voorbeeld.nl'],
-  ['Repetitieruimte 013', 'planning@ruimte013.nl'], ['Bol', 'noreply@bol.example'],
-  ['Gemeente', 'noreply@gemeente.example'], ['Sandra', 'sandra@voorbeeld.nl'],
-]
-const subjects = [
-  'Bevestiging van je reservering', 'Setlist zaterdag', 'Factuur oktober', 'Even bijpraten?',
-  'Je pakket is onderweg', 'Nieuwe repetitietijden', 'Foto’s van het optreden', 'Vraag over de hosting',
-  'Herinnering: afspraak', 'Uitnodiging verjaardag',
-]
+const senders = D.senders
+const contactsDb = senders.map(([name, email], i) => ({
+  id: i + 1, name, email, phone: i % 3 ? '' : '06 1234 56' + String(i).padStart(2, '0'), notes: '', favorite: i === 0,
+  saved: i % 2 === 0, times_used: i + 1, last_used_at: new Date(Date.now() - i * 86400000).toISOString(),
+}))
+const subjects = D.subjects
 
 function makeMessages(accountId, folder, count) {
   const now = Date.now()
@@ -38,7 +71,7 @@ function makeMessages(accountId, folder, count) {
       from: { name, email }, to: [{ name: '', email: accounts[accountId - 1].email }],
       date: new Date(now - i * 1000 * 60 * 47).toISOString(),
       seen: i > 3 && i % 5 !== 0, flagged: i % 9 === 2, answered: i % 7 === 3, has_attachments: i % 4 === 1,
-      snippet: ['Hoi Ton, zoals besproken stuur ik je hierbij de details voor zaterdag.', 'Je bestelling is verzonden en wordt morgen tussen 10:00 en 14:00 bezorgd.', 'Bedankt voor je bericht. We nemen zo snel mogelijk contact met je op.', 'Hierbij de foto’s van het optreden, groetjes!'][i % 4],
+      snippet: D.snippets[i % 4],
     }
   })
 }
@@ -82,20 +115,20 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
     extensions: { mbstring: true, openssl: true, sodium: true, pdo_mysql: true, iconv: true, fileinfo: true, zip: true, libxml: true },
     limits: { upload_max_filesize: '64M', post_max_size: '64M', memory_limit: '256M', max_execution_time: '60' },
     database: { server: 'MariaDB (mock)', migrations: { applied: { '001_initial': '' }, pending: [] } },
-    mail_server: { imap: { host: 'mail.example.nl', port: 993, ok: true, ms: 24 }, smtp: { host: 'mail.example.nl', port: 465, ok: true, ms: 31 } },
+    mail_server: { imap: { host: `mail.${D.domain}`, port: 993, ok: true, ms: 24 }, smtp: { host: `mail.${D.domain}`, port: 465, ok: true, ms: 31 } },
     stats: { users: 3, accounts: 4, logins_24h: 6, failed_24h: 2 },
   }
   if (path === '/admin/users') return [
-    { id: 1, login_email: 'ton@example.nl', last_login_at: '2026-10-17 17:00:00', blocked: false, is_admin: true, accounts: accounts.map((a) => ({ email: a.email })) },
+    { id: 1, login_email: D.meEmail, last_login_at: '2026-10-17 17:00:00', blocked: false, is_admin: true, accounts: accounts.map((a) => ({ email: a.email })) },
     { id: 2, login_email: 'lisa@familie.nl', last_login_at: '2026-10-15 09:12:00', blocked: false, is_admin: false, accounts: [{ email: 'lisa@familie.nl' }] },
   ]
   if (path.startsWith('/admin/users/') && method === 'PATCH') return { blocked: body.blocked }
   if (path === '/admin/security') return {
     limits: { window_minutes: 15, max_per_ip: 20, max_per_email: 5 },
     blocked_emails: [{ key: 'a'.repeat(64), email: 'oom@familie.nl', fails: 5 }], blocked_ips: [],
-    recent: [{ at: '2026-10-17 16:58:00', email: 'oom@familie.nl', ip: '84.12.3.4', success: false }, { at: '2026-10-17 16:30:00', email: 'ton@example.nl', ip: '84.12.3.9', success: true }],
+    recent: [{ at: '2026-10-17 16:58:00', email: 'oom@familie.nl', ip: '84.12.3.4', success: false }, { at: '2026-10-17 16:30:00', email: D.meEmail, ip: '84.12.3.9', success: true }],
   }
-  if (path === '/admin/settings') return { allowed_login_domains: ['example.nl'], allowed_from_config: true, user_defaults: settings, admins: [] }
+  if (path === '/admin/settings') return { allowed_login_domains: [D.domain], allowed_from_config: true, user_defaults: settings, admins: [] }
 
   if (path === '/auth/login') { sessionStorage.setItem('pv-mock-login', '1'); return session() }
   if (path === '/auth/me') {
@@ -105,6 +138,25 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
   if (path === '/auth/logout') { sessionStorage.removeItem('pv-mock-login'); return null }
   if (path === '/settings' && method === 'PATCH') return (settings = { ...settings, ...body })
   if (path === '/settings') return settings
+  if (sub === '/scheduled' && method === 'POST') return { id: 1, send_at: new Date(Date.now() + 86400000).toISOString() }
+  if (path.startsWith('/scheduled/')) return path.endsWith('/cancel') ? { account_id: 1, folder: 'Drafts', uid: null } : { sent: true }
+  if ((sub === '/snooze' || sub === '/unsnooze') && method === 'POST') return { snoozed: (body.uids || []).length, returned: (body.uids || []).length }
+  if (path === '/security') return { enabled: false, enabled_at: null, recovery_left: 0, devices: [] }
+  if (path === '/security/2fa/setup') return { secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', uri: `otpauth://totp/Postvak:${encodeURIComponent(D.meEmail)}?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Postvak` }
+  if (path === '/security/2fa/enable' || path === '/security/2fa/recovery') return { recovery_codes: ['abcd-efgh', 'jkmn-pqrs', 'tuvw-xyz2', '3456-789a', 'bcde-fghj', 'kmnp-qrst', 'uvwx-yz23', '4567-89ab', 'cdef-ghjk', 'mnpq-rstu'], status: { enabled: true, enabled_at: new Date().toISOString(), recovery_left: 10, devices: [] } }
+  if (path.startsWith('/security/')) return { enabled: false, enabled_at: null, recovery_left: 0, devices: [] }
+  if (path === '/push') return { public_key: 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U', devices: 0, cron: { last_run: null, ok: false } }
+  if (path.startsWith('/push/')) return { devices: 1, sent: true }
+  if (path === '/contacts/list') return contactsDb.filter((c) => !query.saved || c.saved)
+  if (path === '/contacts/import') return { cards: 0, added: 0, updated: 0, skipped: 0 }
+  if (path === '/contacts' && method === 'POST') {
+    if (contactsDb.some((c) => c.email === body.email && c.saved)) throw Object.assign(new Error('This address is already in your contacts'), { status: 409 })
+    const c = { id: contactsDb.length + 1, name: '', phone: '', notes: '', favorite: false, times_used: 0, last_used_at: null, ...body, saved: true }
+    contactsDb.push(c)
+    return c
+  }
+  if (path.startsWith('/contacts/') && method === 'PATCH') return Object.assign(contactsDb.find((c) => c.id === Number(path.split('/')[2])), body, { saved: true })
+  if (path.startsWith('/contacts/') && method === 'DELETE') { contactsDb.splice(contactsDb.findIndex((c) => c.id === Number(path.split('/')[2])), 1); return null }
   if (path === '/contacts') return senders.filter(([n, e]) => (n + e).toLowerCase().includes((query.q || '').toLowerCase())).map(([name, email]) => ({ name, email }))
   if (path === '/accounts' && method === 'POST') {
     const acc = { ...accounts[1], id: accounts.length + 1, email: body.email, display_name: body.display_name || '', color: '#C98A06', is_login: false }
@@ -117,7 +169,22 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
   if (sub === '/folders' && method === 'POST') { extraFolders.push(body.name); return { path: body.name, folders: folders(id) } }
   if (sub === '/folders' && method === 'PATCH') { const i = extraFolders.indexOf(body.path); if (i >= 0) extraFolders[i] = body.name; return { path: body.name, folders: folders(id) } }
   if (sub === '/folders' && method === 'DELETE') { const p = new URLSearchParams(path.split('?')[1]).get('path'); extraFolders.splice(extraFolders.indexOf(p), 1); return { folders: folders(id) } }
+  if (sub === '/folders/empty' && method === 'POST') { const b = box(id, body.path); const n = b.length; b.splice(0); return { deleted: n } }
   if (sub.startsWith('/folders')) return folders(id)
+
+  if (path === '/unified/messages') {
+    let all = accounts.flatMap((a) => box(a.id, 'INBOX')).sort((a, b) => b.date.localeCompare(a.date))
+    if (query.q) all = all.filter((x) => (x.subject + x.from.name).toLowerCase().includes(query.q.toLowerCase()))
+    const page = Number(query.page || 1), per = Number(query.per_page || 50)
+    return { total: all.length, page, per_page: per, messages: all.slice((page - 1) * per, page * per), errors: [] }
+  }
+  if (sub === '/drafts' && method === 'POST') {
+    const d = box(id, 'Drafts')
+    const uid = 5000 + d.length + Math.floor(Math.random() * 1000)
+    d.unshift({ uid, folder: 'Drafts', account_id: id, subject: '(concept)', from: { name: '', email: accounts[0].email }, to: [], date: new Date().toISOString(), seen: true, flagged: false, answered: false, has_attachments: false, snippet: '' })
+    return { uid, folder: 'Drafts', saved_at: new Date().toISOString(), attachments: [] }
+  }
+  if (sub.startsWith('/drafts/') && method === 'DELETE') { const d = box(id, 'Drafts'); d.splice(d.findIndex((x) => x.uid === Number(sub.split('/').pop())), 1); return null }
 
   if (sub === '/messages') {
     let list = box(id, query.folder || 'INBOX')
@@ -134,6 +201,8 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
     return { total: list.length, page, per_page: per, messages: list.slice((page - 1) * per, page * per) }
   }
 
+  const conv = sub.match(/^\/messages\/(\d+)\/conversation$/)
+  if (conv) return { messages: box(id, query.folder || 'INBOX').filter((x) => x.uid === Number(conv[1])) }
   const show = sub.match(/^\/messages\/(\d+)$/)
   if (show) {
     const msg = box(id, query.folder).find((x) => x.uid === Number(show[1]))
@@ -141,10 +210,10 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
     return {
       ...msg, cc: [], reply_to: [], message_id: `<${msg.uid}@example>`, references: '',
       blocked_images: images ? 0 : 1,
-      html: `<p>Hoi Ton,</p><p>Dit is een voorbeeldbericht om de interface te testen. ${msg.subject.toLowerCase()}, zoals besproken.</p>
+      html: `${D.body(msg.subject)}
              <p>${images ? '<img src="https://picsum.photos/480/200" alt="" />' : '<img alt="" />'}</p>
-             <p>Groet,<br>${msg.from.name}</p>`,
-      attachments: msg.has_attachments ? [{ index: 0, name: 'overzicht.pdf', mime: 'application/pdf', size: 184320, inline: false, url: '#' }] : [],
+             <p>${D.bye},<br>${msg.from.name}</p>`,
+      attachments: msg.has_attachments ? [{ index: 0, name: D.attachment, mime: 'application/pdf', size: 184320, inline: false, url: '#' }] : [],
     }
   }
 

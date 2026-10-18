@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { api, setCsrf } from '../api/client.js'
+import { setLanguage } from '../i18n/index.js'
 
 export const useSession = defineStore('session', {
   state: () => ({
@@ -22,6 +23,7 @@ export const useSession = defineStore('session', {
       this.settings = data.settings
       setCsrf(data.csrf)
       this.applyTheme()
+      setLanguage(this.settings.language ?? 'auto')
     },
 
     async init() {
@@ -35,8 +37,17 @@ export const useSession = defineStore('session', {
       }
     },
 
+    /** Returns { twoFactor: true } when a code from the authenticator app is needed next. */
     async login(credentials) {
-      this.apply(await api.post('/auth/login', credentials))
+      const data = await api.post('/auth/login', credentials)
+      if (data?.two_factor) return { twoFactor: true }
+      this.apply(data)
+      return { twoFactor: false }
+    },
+
+    /** Second login step: code from the app (or a recovery code). */
+    async verifyTwoFactor(code, remember) {
+      this.apply(await api.post('/auth/2fa', { code, remember }))
     },
 
     async logout() {
@@ -53,11 +64,16 @@ export const useSession = defineStore('session', {
       const previous = { ...this.settings }
       this.settings = { ...this.settings, ...changes } // optimistic
       this.applyTheme()
+      if ('language' in changes) {
+        setLanguage(changes.language)
+        import('../push.js').then((m) => m.syncPushLanguage())
+      }
       try {
         this.settings = await api.patch('/settings', changes)
       } catch (e) {
         this.settings = previous
         this.applyTheme()
+        setLanguage(previous.language ?? 'auto')
         throw e
       }
     },

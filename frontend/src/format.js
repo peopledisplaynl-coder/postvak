@@ -1,4 +1,4 @@
-const LOCALE = 'nl-NL'
+import { locale, t } from './i18n/index.js'
 
 /** Short date for the message list: time today, "gisteren", weekday this week, otherwise date. */
 export function listDate(iso) {
@@ -8,16 +8,30 @@ export function listDate(iso) {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const days = Math.floor((startOfToday - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000)
 
-  if (days <= 0) return d.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })
-  if (days === 1) return 'gisteren'
-  if (days < 7) return d.toLocaleDateString(LOCALE, { weekday: 'short' })
-  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })
-  return d.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' })
+  if (days <= 0) return d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
+  if (days === 1) return t('dates.yesterday')
+  if (days < 7) return d.toLocaleDateString(locale(), { weekday: 'short' })
+  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' })
+  return d.toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+/** A moment in the near future, short: "vandaag 18:00" / "tomorrow 08:00", "do 08:00", "3 nov 08:00". */
+export function laterDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - startOfToday) / 86400000)
+  const time = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
+  if (days <= 0) return `${t('dates.today')} ${time}`
+  if (days === 1) return `${t('dates.tomorrow')} ${time}`
+  if (days < 7) return `${d.toLocaleDateString(locale(), { weekday: 'short' })} ${time}`
+  return `${d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' })} ${time}`
 }
 
 export function fullDate(iso) {
   if (!iso) return ''
-  return new Date(iso).toLocaleString(LOCALE, { dateStyle: 'full', timeStyle: 'short' })
+  return new Date(iso).toLocaleString(locale(), { dateStyle: 'full', timeStyle: 'short' })
 }
 
 export function fileSize(bytes) {

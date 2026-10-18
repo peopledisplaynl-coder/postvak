@@ -65,6 +65,9 @@ final class AccountController
             ImapService::verify($server, $newPassword ?? \Postvak\Crypto::decrypt($account['password_enc']));
         }
 
+        if (array_key_exists('notify', $body)) {
+            $body['notify'] = $body['notify'] ? 1 : 0;
+        }
         $this->accounts->update((int) $account['id'], $body);
         if ($newPassword !== null) {
             $this->accounts->updatePassword((int) $account['id'], $newPassword);

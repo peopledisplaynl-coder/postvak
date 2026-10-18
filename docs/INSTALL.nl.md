@@ -1,5 +1,27 @@
 # Installatie op shared hosting (alleen FTP)
 
+Er zijn twee manieren:
+
+- **A. Met de release-zip en de installatiewizard** (aanbevolen, je hoeft niets te bouwen): hieronder.
+- **B. Zelf bouwen en uploaden met `npm run deploy`**: voor wie aan Postvak zelf werkt, vanaf "Wat je op je eigen computer nodig hebt".
+
+## A. Release-zip met installatiewizard
+
+1. Download `postvak-x.y.z.zip` van de nieuwste release op GitHub en pak hem uit. Je krijgt de mappen `public/` en `app/`.
+2. Maak in het hostingpaneel het (sub)domein aan, zet SSL aan, controleer PHP 8.2+ en maak een lege MySQL-database met gebruiker.
+3. Upload de **inhoud** van `public/` naar de documentmap van het (sub)domein (let op dat `.htaccess` meegaat)
+   en de map `app/` **naast** de documentmap, bijvoorbeeld `httpdocs/` en `app/` in dezelfde map.
+   Staat `app/` ergens anders, pas dan het pad aan in `public/api/app-path.php`.
+4. Open `https://jouw-domein/install.php`, controleer dat alles groen is, vul database, adres en mailserver in en klik op **Installeren**.
+   De wizard maakt de tabellen aan, schrijft `app/config/config.php` en verwijdert zichzelf.
+   **Bewaar een kopie van `config.php`**: daarin staat `app_key`, nodig om de opgeslagen wachtwoorden te lezen.
+5. Stel de cronjob in (zie stap 6 hieronder, met `app/cron.php`) en log in met je mailbox.
+
+Bijwerken: upload de nieuwe `public/` en `app/` over de oude heen, behalve `install.php`, en houd `app/config/config.php`.
+Database-aanpassingen gebeuren vanzelf bij de volgende keer inloggen.
+
+## B. Zelf bouwen en uploaden
+
 Deze handleiding gaat uit van een host met DirectAdmin of cPanel (zoals Cloud86), PHP 8.2 of hoger,
 MySQL/MariaDB en alleen FTP-toegang. Het bouwen gebeurt op je eigen computer.
 
@@ -80,12 +102,34 @@ Met `npm run deploy -- --dry-run` zie je eerst wat er geüpload zou worden.
 2. Open `https://mail.jouwdomein.nl` en log in met een mailbox.
 3. Op je telefoon: open de site en kies "Zet op beginscherm" (iPhone) of "App installeren" (Android).
 
+## 6. Cronjob (voor meldingen bij nieuwe mail)
+
+Postvak controleert elke paar minuten of er nieuwe mail is en stuurt dan een pushmelding naar de
+apparaten waarop meldingen aan staan. Dat doet `cron.php` in de programmamap.
+
+**Plesk:** Geplande taken → Taak toevoegen → *PHP-script uitvoeren* → kies
+`postvak-app/cron.php` (de map uit `REMOTE_APPDIR`), dezelfde PHP-versie als de website, en
+bij *Cron-stijl* `*/5 * * * *`. Klik op *Nu uitvoeren* om te testen; onder **Beheer → Overzicht**
+zie je daarna wanneer de taak voor het laatst draaide.
+
+**DirectAdmin / cPanel:** `php /pad/naar/postvak-app/cron.php`, elke 5 minuten.
+
+**Alleen een URL mogelijk?** Zet in `config.php` een lange willekeurige `cron_key` en laat
+`https://jouw-postvak/api/cron?key=DIE-SLEUTEL` elke 5 minuten aanroepen.
+
+Meldingen zet je per apparaat aan onder **Instellingen → Meldingen**. Op iPhone/iPad werkt dat
+alleen als Postvak op het beginscherm staat (Deel → Zet op beginscherm).
+
 ## Problemen
 
 | Melding | Oplossing |
 |---|---|
 | `Dependencies missing` | `vendor` is niet geüpload. Draai `npm run deploy` zonder `--skip-vendor`. |
-| `config/config.php missing` | Draai één keer `npm run deploy -- --with-config`. |
+| `Postvak is not installed yet` | Open `/install.php` (release-zip) of draai één keer `npm run deploy -- --with-config`. |
 | `Could not connect to the mail server` | Klopt `default_servers`? Probeer de servernaam van de host in plaats van `mail.<domein>`. |
 | 404 op `/api/...` | `.htaccess` ontbreekt of `mod_rewrite` staat uit. Controleer of `.htaccess` in de documentmap staat (verborgen bestanden tonen in je FTP-programma). |
 | Wit scherm | Is de frontend gebouwd? `npm run build` zet de bestanden in `backend/public`. |
+
+**Ik ben mijn telefoon én herstelcodes kwijt (tweestapsverificatie).** Een beheerder kan 2FA uitzetten
+onder Beheer → Gebruikers. Ben je zelf de enige beheerder, voer dan in phpMyAdmin uit:
+`UPDATE users SET totp_secret = NULL, totp_enabled_at = NULL, totp_recovery = NULL WHERE login_email = 'jij@voorbeeld.nl';`

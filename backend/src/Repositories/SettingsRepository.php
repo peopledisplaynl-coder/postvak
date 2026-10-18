@@ -13,7 +13,7 @@ use Postvak\Http\HttpException;
 final class SettingsRepository
 {
     /** Swipe actions a user can choose from. */
-    public const SWIPE_ACTIONS = ['archive', 'trash', 'read', 'flag', 'none'];
+    public const SWIPE_ACTIONS = ['archive', 'trash', 'junk', 'snooze', 'read', 'flag', 'none'];
 
     public const DEFAULTS = [
         'swipe_left'       => 'trash',
@@ -28,6 +28,9 @@ final class SettingsRepository
         'unified_inbox'    => true,            // one inbox for all accounts
         'mark_read_on_open'=> true,
         'sort'             => 'date_desc',     // date_desc | date_asc | from | subject | size_desc
+        'conversations'    => true,            // group messages into conversations (date order only)
+        'undo_send'        => 5,               // seconds to undo "send" (0 = send right away)
+        'language'         => 'auto',          // auto (browser) | nl | en
     ];
 
     private const RULES = [
@@ -43,6 +46,9 @@ final class SettingsRepository
         'unified_inbox'     => ['bool'],
         'mark_read_on_open' => ['bool'],
         'sort'              => ['enum', ['date_desc', 'date_asc', 'from', 'subject', 'size_desc']],
+        'conversations'     => ['bool'],
+        'undo_send'         => ['int', 0, 30],
+        'language'          => ['enum', ['auto', 'nl', 'en']],
     ];
 
     public function get(int $userId): array

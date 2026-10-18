@@ -12,6 +12,8 @@ use Postvak\Http\Response;
 use Postvak\Mail\ImapService;
 use Postvak\Mail\MessageSanitizer;
 use Postvak\Mail\SmtpService;
+use Postvak\Mail\Scheduler;
+use Postvak\Mail\Snoozer;
 use Postvak\Repositories\AccountRepository;
 use Postvak\Repositories\SnippetCache;
 use Postvak\Repositories\TrustedSenderRepository;
@@ -33,6 +35,69 @@ final class MailController
     {
         [, $imap] = $this->open($r);
         Response::json($imap->folders());
+    }
+
+    /**
+     * GET /unified/messages?page=1&per_page=50&q=&sort=date_desc
+     * The inboxes of all the user's accounts in one list. Each message has account_id.
+     */
+    public function unified(Request $r): void
+    {
+        $userId = Auth::requireUser();
+        session_write_close();
+        $page = max(1, (int) $r->query('page', 1));
+        $perPage = min(100, max(10, (int) $r->query('per_page', 50)));
+        $q = trim((string) $r->query('q', ''));
+        $sort = (string) $r->query('sort', 'date_desc');
+        if (!in_array($sort, ['date_desc', 'date_asc', 'from', 'subject'], true)) {
+            $sort = 'date_desc'; // size is not known for every message, so sort by date instead
+        }
+
+        $threads = $r->query('threads') === '1' && $sort === 'date_desc';
+
+        // Take the first page*perPage of every inbox; the merged page is always within those.
+        $need = $page * $perPage;
+        $all = [];
+        $total = 0;
+        $errors = [];
+        foreach ($this->accounts->forUser($userId) as $account) {
+            try {
+                $imap = new ImapService($account);
+                $imap->setSearchInBody($r->query('body') === '1');
+                $cache = new SnippetCache((int) $account['id']);
+                $list = $threads
+                    ? $imap->listThreads('INBOX', 1, $need, $q === '' ? null : $q, $cache)
+                    : $imap->listMessages('INBOX', 1, $need, $q === '' ? null : $q, $sort, $cache);
+                $imap->disconnect();
+                $total += $list['total'];
+                array_push($all, ...$list['messages']);
+            } catch (Throwable $e) {
+                $errors[] = ['account_id' => (int) $account['id'], 'email' => $account['email'], 'error' => $e->getMessage()];
+            }
+        }
+
+        $key = static fn (array $m): string => match ($sort) {
+            'from'    => mb_strtolower(($m['from']['name'] ?? '') ?: ($m['from']['email'] ?? '')),
+            'subject' => mb_strtolower(preg_replace('/^((re|fw|fwd|aw|antw)\s*:\s*)+/i', '', $m['subject']) ?? ''),
+            default   => (string) $m['date'],
+        };
+        usort($all, static function ($a, $b) use ($key, $sort) {
+            $cmp = strcmp($key($a), $key($b));
+            if ($sort === 'date_desc') {
+                $cmp = -$cmp;
+            }
+            return $cmp ?: strcmp((string) $b['date'], (string) $a['date']);
+        });
+
+        Response::json([
+            'total'    => $total,
+            'page'     => $page,
+            'per_page' => $perPage,
+            'sort'     => $sort,
+            'threaded' => $threads,
+            'messages' => array_slice($all, ($page - 1) * $perPage, $perPage),
+            'errors'   => $errors,
+        ]);
     }
 
     /** POST /accounts/{id}/folders  {name, parent?} */
@@ -73,7 +138,114 @@ final class MailController
         $q = trim((string) $r->query('q', ''));
         $sort = (string) $r->query('sort', 'date_desc');
 
-        Response::json($imap->listMessages($this->folderParam($r), $page, $perPage, $q === '' ? null : $q, $sort, new SnippetCache((int) $account['id'])));
+        $cache = new SnippetCache((int) $account['id']);
+        $folder = $this->folderParam($r);
+        $imap->setSearchInBody($r->query('body') === '1');
+        // threads=1: one row per conversation (only in date order, like Gmail).
+        $list = $r->query('threads') === '1' && $sort === 'date_desc'
+            ? $imap->listThreads($folder, $page, $perPage, $q === '' ? null : $q, $cache)
+            : $imap->listMessages($folder, $page, $perPage, $q === '' ? null : $q, $sort, $cache);
+        Response::json($this->annotate($account, $imap, $folder, $list));
+    }
+
+    /** In the Scheduled and Snoozed folders: add the send time / return time to each row. */
+    private function annotate(array $account, ImapService $imap, string $folder, array $list): array
+    {
+        $role = null;
+        foreach (['scheduled', 'snoozed'] as $candidate) {
+            if ($imap->roleFolder($candidate, false) === $folder) {
+                $role = $candidate;
+            }
+        }
+        if ($role === null) {
+            return $list;
+        }
+        $info = $role === 'scheduled' ? (new Scheduler())->forAccount((int) $account['id']) : (new Snoozer())->forAccount((int) $account['id']);
+        foreach ($list['messages'] as &$m) {
+            $value = $m['message_id'] ? ($info[$m['message_id']] ?? null) : null;
+            if ($role === 'scheduled') {
+                $m['scheduled'] = $value;
+            } else {
+                $m['snoozed_until'] = $value;
+            }
+        }
+        unset($m);
+        return $list;
+    }
+
+    // ------------------------------------------------------- send later / snooze
+
+    /** POST /accounts/{id}/scheduled — like send, plus payload.send_at (ISO 8601). */
+    public function schedule(Request $r): void
+    {
+        [$account, $imap] = $this->open($r);
+        $payload = json_decode((string) ($_POST['payload'] ?? ''), true);
+        if (!is_array($payload)) {
+            $payload = $r->body();
+        }
+        $sendAt = strtotime((string) ($payload['send_at'] ?? ''));
+        if ($sendAt === false) {
+            throw HttpException::badRequest('Invalid send time');
+        }
+        $mail = $this->validateMail($payload);
+        $attachments = [...$this->keptAttachments($imap, $payload), ...$this->uploadedFiles()];
+        $replyRef = !empty($payload['reply_folder']) && !empty($payload['reply_uid'])
+            ? ['folder' => (string) $payload['reply_folder'], 'uid' => (int) $payload['reply_uid']]
+            : null;
+        $scheduled = (new Scheduler())->schedule($account, $imap, $mail, $attachments, $sendAt, $replyRef);
+
+        if (!empty($payload['draft_uid'])) {
+            try {
+                if ($drafts = $imap->roleFolder('drafts', false)) {
+                    $imap->deletePermanently($drafts, [(int) $payload['draft_uid']]);
+                }
+            } catch (Throwable $e) {
+                error_log('[postvak] could not remove scheduled draft: ' . $e->getMessage());
+            }
+        }
+        Response::json($scheduled, 201);
+    }
+
+    /** POST /scheduled/{id}/cancel — back to Drafts; returns {account_id, folder, uid} of the draft. */
+    public function cancelScheduled(Request $r): void
+    {
+        $userId = Auth::requireUser();
+        session_write_close();
+        Response::json((new Scheduler())->cancel($userId, $r->intParam('id')));
+    }
+
+    /** POST /scheduled/{id}/send — send now instead of later. */
+    public function sendScheduledNow(Request $r): void
+    {
+        $userId = Auth::requireUser();
+        session_write_close();
+        (new Scheduler())->sendNow($userId, $r->intParam('id'));
+        Response::json(['sent' => true]);
+    }
+
+    /** POST /accounts/{id}/snooze  {folder, uids, until (ISO 8601)} */
+    public function snooze(Request $r): void
+    {
+        [$account, $imap] = $this->open($r);
+        $until = strtotime($r->string('until'));
+        if ($until === false) {
+            throw HttpException::badRequest('Invalid time');
+        }
+        Response::json(['snoozed' => (new Snoozer())->snooze($account, $imap, $this->folderParam($r), $this->uids($r), $until)]);
+    }
+
+    /** POST /accounts/{id}/unsnooze  {uids} (in the Snoozed folder) — back to the inbox now. */
+    public function unsnooze(Request $r): void
+    {
+        [$account, $imap] = $this->open($r);
+        Response::json(['returned' => (new Snoozer())->unsnooze($account, $imap, $this->uids($r))]);
+    }
+
+    /** GET /accounts/{id}/messages/{uid}/conversation?folder=INBOX — the whole conversation, oldest first. */
+    public function conversation(Request $r): void
+    {
+        [$account, $imap] = $this->open($r);
+        Response::json(['messages' => $imap->conversation($this->folderParam($r), $r->intParam('uid'), new SnippetCache((int) $account['id']))]);
     }
 
     /** GET /accounts/{id}/messages/{uid}?folder=INBOX&images=1 */
@@ -138,6 +310,25 @@ final class MailController
         Response::json(['moved' => count($uids), 'target' => $targetPath]);
     }
 
+    /** POST /accounts/{id}/folders/read  {path}: mark everything in the folder as read. */
+    public function markFolderRead(Request $r): void
+    {
+        [, $imap] = $this->open($r);
+        Response::json(['read' => $imap->markAllRead($r->string('path'))]);
+    }
+
+    /** POST /accounts/{id}/folders/empty  {path}: empty the trash or spam folder. */
+    public function emptyFolder(Request $r): void
+    {
+        [, $imap] = $this->open($r);
+        $path = $r->string('path');
+        $allowed = array_filter([$imap->roleFolder('trash', false), $imap->roleFolder('junk', false)]);
+        if ($path === '' || !in_array($path, $allowed, true)) {
+            throw HttpException::badRequest('Only the trash and spam folders can be emptied');
+        }
+        Response::json(['deleted' => $imap->emptyFolder($path)]);
+    }
+
     /** POST /accounts/{id}/flags  {folder, uids:[..], seen?:bool, flagged?:bool} */
     public function flags(Request $r): void
     {
@@ -161,9 +352,20 @@ final class MailController
             $payload = $r->body();
         }
         $mail = $this->validateMail($payload);
-        $attachments = $this->uploadedFiles();
+        $attachments = [...$this->keptAttachments($imap, $payload), ...$this->uploadedFiles()];
 
         $raw = SmtpService::send($account, $mail, $attachments);
+
+        // A message sent from a draft: remove the draft.
+        if (!empty($payload['draft_uid'])) {
+            try {
+                if ($drafts = $imap->roleFolder('drafts', false)) {
+                    $imap->deletePermanently($drafts, [(int) $payload['draft_uid']]);
+                }
+            } catch (Throwable $e) {
+                error_log('[postvak] could not remove sent draft: ' . $e->getMessage());
+            }
+        }
 
         // Save a copy in Sent (most IMAP servers do not do this automatically).
         try {
@@ -182,20 +384,61 @@ final class MailController
             }
         }
 
-        $this->rememberContacts((int) $account['user_id'], [...$mail['to'], ...($mail['cc'] ?? []), ...($mail['bcc'] ?? [])]);
+        \Postvak\Repositories\ContactRepository::remember((int) $account['user_id'], [...$mail['to'], ...($mail['cc'] ?? []), ...($mail['bcc'] ?? [])]);
         Response::json(['sent' => true]);
     }
 
-    /** GET /contacts?q=jan — address autocomplete. */
-    public function contacts(Request $r): void
+    /**
+     * POST /accounts/{id}/drafts  (multipart/form-data, same fields as send)
+     *   payload.draft_uid: the previous version, replaced by this one
+     *   payload.include_attachments: {folder, uid, indexes[]} attachments to carry over
+     * Returns the new draft's uid and its attachments.
+     */
+    public function saveDraft(Request $r): void
     {
-        $userId = Auth::requireUser();
-        $q = '%' . str_replace(['%', '_'], ['\%', '\_'], trim((string) $r->query('q', ''))) . '%';
-        Response::json(Database::all(
-            'SELECT email, name FROM contacts WHERE user_id = ? AND (email LIKE ? OR name LIKE ?)
-             ORDER BY times_used DESC, last_used_at DESC LIMIT 10',
-            [$userId, $q, $q]
-        ));
+        [$account, $imap] = $this->open($r);
+        $payload = json_decode((string) ($_POST['payload'] ?? ''), true);
+        if (!is_array($payload)) {
+            $payload = $r->body();
+        }
+        $mail = $this->validateMail($payload, false);
+        if (!empty($payload['reply_folder']) && !empty($payload['reply_uid'])) {
+            $mail['reply_ref'] = base64_encode((string) $payload['reply_folder']) . ':' . (int) $payload['reply_uid'];
+        }
+        $kept = $this->keptAttachments($imap, $payload);
+        $uploaded = $this->uploadedFiles();
+        $attachments = [...$kept, ...$uploaded];
+
+        $folder = (string) $imap->roleFolder('drafts');
+        $token = bin2hex(random_bytes(12));
+        $raw = SmtpService::buildDraft($account, $mail, $attachments, $token);
+        $imap->append($folder, $raw, ['\\Draft', '\\Seen']);
+        $uid = $imap->findUidByHeader($folder, SmtpService::DRAFT_HEADER, $token);
+
+        if (!empty($payload['draft_uid']) && (int) $payload['draft_uid'] !== $uid) {
+            try {
+                $imap->deletePermanently($folder, [(int) $payload['draft_uid']]);
+            } catch (Throwable $e) {
+                error_log('[postvak] could not remove old draft: ' . $e->getMessage());
+            }
+        }
+
+        Response::json([
+            'uid'         => $uid,
+            'folder'      => $folder,
+            'saved_at'    => date(DATE_ATOM),
+            'attachments' => array_map(static fn ($a, $i) => ['index' => $i, 'name' => $a['name'], 'mime' => $a['mime'], 'size' => strlen($a['content'])], $attachments, array_keys($attachments)),
+        ]);
+    }
+
+    /** DELETE /accounts/{id}/drafts/{uid} — discard a draft. */
+    public function deleteDraft(Request $r): void
+    {
+        [, $imap] = $this->open($r);
+        if ($drafts = $imap->roleFolder('drafts', false)) {
+            $imap->deletePermanently($drafts, [$r->intParam('uid')]);
+        }
+        Response::noContent();
     }
 
     // ------------------------------------------------------------------ helpers
@@ -281,10 +524,14 @@ final class MailController
             'from'           => $from ? ['name' => $from->personal, 'email' => $from->mail] : null,
             'to'             => ImapService::addresses($m->getTo()),
             'cc'             => ImapService::addresses($m->getCc()),
+            'bcc'            => ImapService::addresses($m->getBcc()),
             'reply_to'       => ImapService::addresses($m->getReplyTo()),
             'date'           => $date,
-            'message_id'     => (string) $m->getMessageId(),
-            'references'     => (string) ($header?->get('references') ?? ''),
+            'message_id'     => self::msgIds((string) $m->getMessageId()),
+            'references'     => self::msgIds(self::attrString($header?->get('references'))),
+            'in_reply_to'    => self::msgIds(self::attrString($header?->get('in_reply_to'))),
+            'reply_ref'      => self::parseReplyRef((string) ($header?->get(strtolower(str_replace('-', '_', SmtpService::REPLY_HEADER))) ?? '')),
+            'draft'          => $flags->has('draft'),
             'seen'           => $flags->has('seen'),
             'flagged'        => $flags->has('flagged'),
             'answered'       => $flags->has('answered'),
@@ -295,7 +542,43 @@ final class MailController
         ];
     }
 
-    private function validateMail(array $p): array
+    /** Message-IDs in header form: "<a@b> <c@d>" (the library strips the angle brackets). */
+    private static function msgIds(string $value): string
+    {
+        $ids = preg_split('/[\s,]+/', trim(str_replace(['<', '>'], ' ', $value))) ?: [];
+        return implode(' ', array_map(static fn ($id) => "<$id>", array_filter($ids)));
+    }
+
+    private static function attrString(mixed $attr): string
+    {
+        if ($attr === null) {
+            return '';
+        }
+        $values = method_exists($attr, 'all') ? $attr->all() : [(string) $attr];
+        return implode(' ', array_map('strval', array_filter($values, 'is_scalar')));
+    }
+
+    /** @return array{folder:string, uid:int}|null */
+    private static function parseReplyRef(string $value): ?array
+    {
+        if (!preg_match('/^([A-Za-z0-9+\/=]+):(\d+)$/', trim($value), $m)) {
+            return null;
+        }
+        $folder = base64_decode($m[1], true);
+        return $folder === false ? null : ['folder' => $folder, 'uid' => (int) $m[2]];
+    }
+
+    /** Attachments copied from an existing message (the draft being edited, or a forwarded mail). */
+    private function keptAttachments(ImapService $imap, array $payload): array
+    {
+        $inc = $payload['include_attachments'] ?? null;
+        if (!is_array($inc) || empty($inc['folder']) || empty($inc['uid']) || empty($inc['indexes']) || !is_array($inc['indexes'])) {
+            return [];
+        }
+        return $imap->attachmentsOf((string) $inc['folder'], (int) $inc['uid'], array_map('intval', $inc['indexes']));
+    }
+
+    private function validateMail(array $p, bool $requireRecipients = true): array
     {
         $clean = static function ($list): array {
             $out = [];
@@ -318,7 +601,7 @@ final class MailController
             'in_reply_to' => $p['in_reply_to'] ?? null,
             'references'  => $p['references'] ?? null,
         ];
-        if ($mail['to'] === [] && $mail['cc'] === [] && $mail['bcc'] === []) {
+        if ($requireRecipients && $mail['to'] === [] && $mail['cc'] === [] && $mail['bcc'] === []) {
             throw HttpException::badRequest('Add at least one recipient');
         }
         return $mail;
@@ -351,15 +634,4 @@ final class MailController
         return $out;
     }
 
-    private function rememberContacts(int $userId, array $recipients): void
-    {
-        foreach ($recipients as $r) {
-            Database::run(
-                'INSERT INTO contacts (user_id, email, name, times_used, last_used_at) VALUES (?, ?, ?, 1, NOW())
-                 ON DUPLICATE KEY UPDATE times_used = times_used + 1, last_used_at = NOW(),
-                   name = COALESCE(NULLIF(VALUES(name), \'\'), name)',
-                [$userId, strtolower($r['email']), $r['name'] ?: null]
-            );
-        }
-    }
 }

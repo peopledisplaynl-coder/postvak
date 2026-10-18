@@ -144,6 +144,8 @@ final class SnippetExtractor
     private static function htmlToText(string $html): string
     {
         $html = preg_replace('#<(head|style|script|title)\b[^>]*>.*?(</\1>|$)#is', ' ', $html) ?? $html;
+        // Quoted replies are not part of the preview.
+        $html = preg_replace('#<blockquote\b.*$#is', ' ', $html) ?? $html;
         $html = preg_replace('#<br\s*/?>|</(p|div|tr|li|h[1-6])>#i', "\n", $html) ?? $html;
         $text = strip_tags($html);
         $text = preg_replace('/<[^>]*$/', '', $text) ?? $text; // tag cut off at the end
@@ -160,6 +162,8 @@ final class SnippetExtractor
     private static function clip(string $text): string
     {
         $text = trim(preg_replace('/\s+/u', ' ', $text) ?? '');
+        // Drop a trailing "On ... wrote:" / "Op ... schreef ...:" line left over from a quote.
+        $text = trim(preg_replace('/(^|\s)(Op|On|Am|Le)\s.{5,140}?\s(schreef|wrote|schrieb|a écrit)\b[^:]{0,80}:\s*$/u', '', $text) ?? $text);
         if (mb_strlen($text) <= self::LENGTH) {
             return $text;
         }

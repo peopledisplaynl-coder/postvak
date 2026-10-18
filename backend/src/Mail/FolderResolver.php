@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Postvak\Mail;
 
 /**
- * Detects special folders (archive, trash, sent, drafts, junk) by name.
+ * Detects special folders (archive, trash, sent, drafts, junk, scheduled, snoozed) by name.
  * A folder configured on the account always wins over detection.
  */
 final class FolderResolver
@@ -16,6 +16,9 @@ final class FolderResolver
         'sent'     => ['sent', 'sent items', 'sent messages', 'sent mail', 'verzonden', 'verzonden items'],
         'drafts'   => ['drafts', 'draft', 'concepten', 'concept'],
         'junk'     => ['junk', 'spam', 'junk e-mail', 'ongewenste e-mail', 'ongewenst'],
+        // Postvak's own folders for "send later" and "snooze".
+        'scheduled' => ['gepland', 'scheduled', 'send later', 'later versturen'],
+        'snoozed'   => ['gesnoozed', 'snoozed', 'snooze'],
     ];
 
     /** Fallback paths to create when a role folder is missing (Dovecot style). */
@@ -25,6 +28,8 @@ final class FolderResolver
         'sent'    => 'Sent',
         'drafts'  => 'Drafts',
         'junk'    => 'Junk',
+        'scheduled' => 'Gepland',
+        'snoozed'   => 'Gesnoozed',
     ];
 
     /**

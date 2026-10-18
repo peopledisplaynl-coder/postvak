@@ -1,6 +1,6 @@
 import { t } from './i18n/index.js'
 
-const ROLE_ICONS = { inbox: 'inbox', drafts: 'drafts', sent: 'sent', archive: 'archive', junk: 'junk', trash: 'trash' }
+const ROLE_ICONS = { inbox: 'inbox', drafts: 'drafts', sent: 'sent', archive: 'archive', junk: 'junk', trash: 'trash', scheduled: 'scheduled', snoozed: 'clock' }
 
 /** Display name of a folder: translated for special folders, otherwise the path without "INBOX". */
 export function folderLabel(f) {

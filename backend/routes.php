@@ -5,7 +5,10 @@ use Postvak\Controllers\AccountController;
 use Postvak\Controllers\AdminController;
 use Postvak\Controllers\TrustedSenderController;
 use Postvak\Controllers\AuthController;
+use Postvak\Controllers\ContactController;
 use Postvak\Controllers\MailController;
+use Postvak\Controllers\PushController;
+use Postvak\Controllers\TwoFactorController;
 use Postvak\Controllers\SettingsController;
 use Postvak\Http\Router;
 
@@ -17,8 +20,12 @@ $mail = new MailController();
 $settings = new SettingsController();
 $trusted = new TrustedSenderController();
 $admin = new AdminController();
+$contacts = new ContactController();
+$push = new PushController();
+$twoFactor = new TwoFactorController();
 
 $router->post('/auth/login', [$auth, 'login']);
+$router->post('/auth/2fa', [$auth, 'verifyTwoFactor']);
 $router->post('/auth/logout', [$auth, 'logout']);
 $router->get('/auth/me', [$auth, 'me']);
 
@@ -34,14 +41,31 @@ $router->get('/accounts/{id}/folders', [$mail, 'folders']);
 $router->post('/accounts/{id}/folders', [$mail, 'createFolder']);
 $router->patch('/accounts/{id}/folders', [$mail, 'renameFolder']);
 $router->delete('/accounts/{id}/folders', [$mail, 'deleteFolder']);
+$router->post('/accounts/{id}/folders/empty', [$mail, 'emptyFolder']);
+$router->post('/accounts/{id}/folders/read', [$mail, 'markFolderRead']);
 $router->get('/accounts/{id}/messages', [$mail, 'messages']);
 $router->get('/accounts/{id}/messages/{uid}', [$mail, 'show']);
 $router->get('/accounts/{id}/messages/{uid}/attachments/{index}', [$mail, 'attachment']);
+$router->get('/accounts/{id}/messages/{uid}/conversation', [$mail, 'conversation']);
 $router->post('/accounts/{id}/move', [$mail, 'move']);
 $router->post('/accounts/{id}/flags', [$mail, 'flags']);
 $router->post('/accounts/{id}/send', [$mail, 'send']);
+$router->post('/accounts/{id}/drafts', [$mail, 'saveDraft']);
+$router->delete('/accounts/{id}/drafts/{uid}', [$mail, 'deleteDraft']);
 
-$router->get('/contacts', [$mail, 'contacts']);
+$router->get('/contacts', [$contacts, 'suggest']);
+$router->get('/contacts/list', [$contacts, 'index']);
+$router->get('/contacts/export', [$contacts, 'export']);
+$router->post('/contacts/import', [$contacts, 'import']);
+$router->post('/contacts', [$contacts, 'store']);
+$router->patch('/contacts/{id}', [$contacts, 'update']);
+$router->delete('/contacts/{id}', [$contacts, 'destroy']);
+$router->get('/unified/messages', [$mail, 'unified']);
+$router->post('/accounts/{id}/scheduled', [$mail, 'schedule']);
+$router->post('/scheduled/{id}/cancel', [$mail, 'cancelScheduled']);
+$router->post('/scheduled/{id}/send', [$mail, 'sendScheduledNow']);
+$router->post('/accounts/{id}/snooze', [$mail, 'snooze']);
+$router->post('/accounts/{id}/unsnooze', [$mail, 'unsnooze']);
 
 $router->get('/trusted-senders', [$trusted, 'index']);
 $router->post('/trusted-senders', [$trusted, 'store']);
@@ -52,9 +76,23 @@ $router->post('/admin/migrate', [$admin, 'migrate']);
 $router->get('/admin/users', [$admin, 'users']);
 $router->patch('/admin/users/{id}', [$admin, 'updateUser']);
 $router->delete('/admin/users/{id}', [$admin, 'deleteUser']);
+$router->post('/admin/users/{id}/reset-2fa', [$admin, 'resetTwoFactor']);
 $router->get('/admin/security', [$admin, 'security']);
 $router->post('/admin/security/release', [$admin, 'release']);
 $router->get('/admin/settings', [$admin, 'settings']);
 $router->patch('/admin/settings', [$admin, 'updateSettings']);
 
 $router->get('/health', static fn () => \Postvak\Http\Response::json(['ok' => true, 'version' => POSTVAK_VERSION]));
+
+$router->get('/push', [$push, 'show']);
+$router->post('/push/subscriptions', [$push, 'subscribe']);
+$router->post('/push/unsubscribe', [$push, 'unsubscribe']);
+$router->post('/push/test', [$push, 'test']);
+$router->get('/cron', [$push, 'cron']);
+
+$router->get('/security', [$twoFactor, 'show']);
+$router->post('/security/2fa/setup', [$twoFactor, 'setup']);
+$router->post('/security/2fa/enable', [$twoFactor, 'enable']);
+$router->post('/security/2fa/disable', [$twoFactor, 'disable']);
+$router->post('/security/2fa/recovery', [$twoFactor, 'recovery']);
+$router->post('/security/devices/forget', [$twoFactor, 'forgetDevices']);

@@ -66,6 +66,35 @@ const env = loadEnv()
 
 // ------------------------------------------------------------------- build
 
+// ------------------------------------------------------------ dependencies
+// New or updated packages since the last deploy (package-lock.json / composer.lock changed):
+// install them first, so "npm run deploy" is all that is needed after unpacking an update.
+const depsFile = join(root, '.deploy-deps.json')
+const depsState = existsSync(depsFile) ? JSON.parse(readFileSync(depsFile, 'utf8')) : {}
+const lockHash = (file) => (existsSync(file) ? createHash('sha256').update(readFileSync(file)).digest('hex') : null)
+
+const npmLock = lockHash(join(root, 'frontend', 'package-lock.json'))
+if (npmLock && (npmLock !== depsState.npm || !existsSync(join(root, 'frontend', 'node_modules')))) {
+  console.log('› New frontend packages: npm install…')
+  execSync('npm install --no-audit --no-fund', { cwd: join(root, 'frontend'), stdio: 'inherit' })
+  depsState.npm = npmLock
+}
+const composerLock = lockHash(join(backend, 'composer.lock'))
+if (composerLock && composerLock !== depsState.composer) {
+  if (depsState.composer === undefined && existsSync(join(backend, 'vendor', 'autoload.php'))) {
+    depsState.composer = composerLock // first run with this check: vendor is assumed current
+  } else {
+    console.log('› New backend packages: composer install…')
+    try {
+      execSync('composer install --no-dev --no-interaction --optimize-autoloader', { cwd: backend, stdio: 'inherit' })
+      depsState.composer = composerLock
+    } catch {
+      fail('composer install failed. Run "composer install --no-dev" in the backend folder, then deploy again.')
+    }
+  }
+}
+writeFileSync(depsFile, JSON.stringify(depsState, null, 2))
+
 if (!args.has('--skip-build')) {
   console.log('› Building frontend…')
   execSync('npm run build', { cwd: join(root, 'frontend'), stdio: 'inherit' })
@@ -104,7 +133,7 @@ function collect(localDir, remoteDir, skip = () => false) {
 const files = [
   ...collect(join(backend, 'public'), env.REMOTE_WEBROOT, (rel) => rel === 'public/api/app-path.php'),
   { local: appPathFile, remote: posix.join(env.REMOTE_WEBROOT, 'api', 'app-path.php') },
-  ...['bootstrap.php', 'routes.php', '.htaccess'].map((f) => ({ local: join(backend, f), remote: posix.join(env.REMOTE_APPDIR, f) })),
+  ...['bootstrap.php', 'routes.php', 'cron.php', '.htaccess'].map((f) => ({ local: join(backend, f), remote: posix.join(env.REMOTE_APPDIR, f) })),
   ...collect(join(backend, 'src'), posix.join(env.REMOTE_APPDIR, 'src')),
   ...collect(join(backend, 'database'), posix.join(env.REMOTE_APPDIR, 'database')),
   ...collect(join(backend, 'vendor'), posix.join(env.REMOTE_APPDIR, 'vendor'), (rel) => VENDOR_SKIP.test(rel.slice('vendor/'.length))),

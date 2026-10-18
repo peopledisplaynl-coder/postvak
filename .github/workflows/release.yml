@@ -1,0 +1,41 @@
+name: Release
+
+# Push a tag like v1.0.0 to build the installable zip and publish a GitHub release with it.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, openssl, sodium, pdo_mysql
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Check tag matches version
+        run: |
+          v=$(node -p "require('./frontend/package.json').version")
+          [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME does not match version $v"; exit 1; }
+      - run: composer install --no-dev --optimize-autoloader --no-interaction --working-dir=backend
+      - run: npm ci --prefix frontend
+      - run: node scripts/release.mjs
+      - run: unzip -tq dist/postvak-*.zip
+      - name: Release notes from CHANGELOG.md
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          awk -v v="$v" '$0 ~ "^## \\[?"v"\\]?" {on=1; next} on && /^## / {exit} on' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Postvak $v" > notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/postvak-*.zip --title "Postvak ${GITHUB_REF_NAME#v}" --notes-file notes.md

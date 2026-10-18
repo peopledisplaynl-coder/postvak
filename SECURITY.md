@@ -17,6 +17,17 @@ Webmail handles mailbox passwords and untrusted HTML from strangers, so both get
 - Planned hardening (roadmap): wrap a per-user key with a key derived from the login password, so a
   stolen database plus config is not enough.
 
+**Two-factor authentication (optional, per user)**
+- TOTP (RFC 6238, SHA-1/30 s/6 digits); the secret is encrypted with `app_key`, each time step is
+  accepted once (no replay), one step of clock drift either way.
+- After the mailbox password is verified, a user with 2FA only gets a "pending" session (5 minutes,
+  5 tries; wrong codes also count for the login rate limiter). The real session starts after the code.
+- 10 single-use recovery codes (stored as HMAC with `app_key`); "remember this device" sets a random
+  `HttpOnly`/`SameSite=Strict` cookie for 30 days (stored hashed, revocable per user).
+- An admin can switch 2FA off for a user. Locked out yourself as the only admin: run
+  `UPDATE users SET totp_secret = NULL, totp_enabled_at = NULL, totp_recovery = NULL WHERE login_email = '…';`
+  in phpMyAdmin.
+
 **Sessions**
 - Cookie: `HttpOnly`, `Secure`, `SameSite=Strict`; session id regenerated at login.
 - CSRF token required on every state-changing request (`X-CSRF-Token`).

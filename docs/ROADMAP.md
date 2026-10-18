@@ -1,6 +1,6 @@
 # Roadmap
 
-## Phase 1: working base (v0.1, this release)
+## Phase 1: working base (v0.1)
 
 - [x] Login with mailbox credentials, sessions, CSRF, login rate limiting
 - [x] Multiple accounts per user, encrypted credentials
@@ -25,20 +25,37 @@
 ## Phase 2: comfort
 
 - [x] Preview snippets in the list (partial `BODY.PEEK[TEXT]<0.4096>` fetch, cached in MySQL)
-- [ ] Unified inbox across all accounts (setting `unified_inbox` already exists)
-- [ ] Conversation view (group by `References` / `In-Reply-To`)
-- [ ] Drafts: autosave to the Drafts folder, edit existing drafts
-- [ ] Rich text editor (e.g. Tiptap) instead of `execCommand`
+- [x] Unified inbox across all accounts ("Alle inboxen", setting `unified_inbox`)
+- [x] Conversation view: IMAP THREAD per folder, own replies from Sent in the reader, actions on whole conversations, setting `conversations`
+- [x] Drafts: autosave to the Drafts folder, edit existing drafts
+- [x] Rich text editor (Tiptap): headings, colours, lists, links, clean paste from Word; the quoted original stays outside the editor (layout kept, can be left out); pasted images become attachments; Ctrl+Enter sends
 - [x] Multi-select in the list (long press on mobile, avatar click on desktop) with bulk actions
 - [x] Move to folder, create/rename/delete folders
-- [ ] Contacts page (import vCard, edit)
-- [ ] English translation
+- [x] Drag & drop (mouse): messages onto a sidebar folder (whole selection; in the unified inbox the sidebar shows the folders of the dragged account), files from the computer into the composer
+- [x] Mark as spam / not spam (button, selection, swipe option, `!`); empty trash and spam
+- [x] Contacts page: saved / favourites / all collected addresses, edit, vCard import and export, "add sender to contacts" in the reader
+- [x] Undo send (setting, default 5 s; the message waits as a draft), mark all as read, search in message text,
+      attachment viewer (images, PDF in a new tab), print, keyboard shortcut overview (`?`, `r`/`a`/`f`, `/`)
+- [x] Deploy installs new npm/composer packages by itself
+- [x] English translation (setting per user: automatic / Nederlands / English; notifications follow the device's language)
 
 ## Phase 3: extras
 
-- [ ] Web Push notifications for new mail (cron job + VAPID keys)
-- [ ] Snooze and send later (cron job)
+- [x] Web Push notifications for new mail (cron job + VAPID keys, no extra dependencies)
+- [x] Snooze and send later (cron job; own IMAP folders "Gesnoozed" and "Gepland")
+- [x] Optional 2FA (TOTP) on top of the mailbox login, recovery codes, remembered devices, admin reset
+- [x] Automated tests: API unit tests, Vitest + Playwright for the frontend, GitHub Actions
+
+## 1.0: ready for others
+
+- [x] Release zip with a web installer (`install.php`), English installation guide
+- [x] Release workflow on GitHub (tag `v*` → zip on the releases page)
+- [x] Screenshots generated from the demo mode (`scripts/screenshots.mjs`), changelog
+
+## Ideas after 1.0
+
 - [ ] Offline reading of recently opened messages (IndexedDB)
 - [ ] Hardening: per-user data key wrapped with a key derived from the login password
-- [ ] Optional 2FA (TOTP) on top of the mailbox login
-- [ ] Automated tests: PHPUnit for the API, Vitest + Playwright for the frontend, GitHub Actions
+- [ ] More interface languages (German, French; one file each)
+- [ ] Filters / rules (Sieve, where the mail server supports ManageSieve)
+- [ ] Calendar invitations (.ics) shown in the reader

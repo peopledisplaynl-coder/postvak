@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-backend/vendor/
+backend/vendor
 
 # Secrets
 .env.deploy
@@ -15,6 +15,8 @@ backend/public/registerSW.js
 backend/public/manifest.webmanifest
 backend/public/icon*.png
 backend/public/icon.svg
+backend/public/push-sw.js
+backend/public/badge-96.png
 backend/public/api/app-path.php
 
 # Runtime
@@ -28,3 +30,9 @@ Thumbs.db
 !.vscode/extensions.json
 *.log
 .deploy-state.json
+.deploy-deps.json
+
+# Tests and releases
+frontend/test-results/
+frontend/playwright-report/
+dist/

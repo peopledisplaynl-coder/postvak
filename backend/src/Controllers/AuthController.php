@@ -16,6 +16,7 @@ use Postvak\RateLimiter;
 use Postvak\Repositories\AccountRepository;
 use Postvak\Repositories\SettingsRepository;
 use Postvak\Repositories\UserRepository;
+use Postvak\Security\TwoFactor;
 
 final class AuthController
 {
@@ -74,6 +75,45 @@ final class AuthController
             }
         }
 
+        // Two-factor: the password was right, now the code. Nothing is logged in yet.
+        $twoFactor = new TwoFactor();
+        if ($twoFactor->enabled($userId) && !$twoFactor->isTrustedDevice($userId)) {
+            session_regenerate_id(true);
+            $_SESSION = ['pending_2fa' => ['user_id' => $userId, 'email' => $email, 'until' => time() + 300, 'tries' => 0]];
+            Response::json(['two_factor' => true]);
+        }
+
+        $this->users->touchLogin($userId);
+        $csrf = Auth::login($userId);
+        $this->respondWithSession($userId, $csrf);
+    }
+
+    /**
+     * POST /auth/2fa  {code, remember?} — second step of the login: a code from the
+     * authenticator app or a recovery code. Five tries, then log in again.
+     */
+    public function verifyTwoFactor(Request $r): void
+    {
+        $pending = $_SESSION['pending_2fa'] ?? null;
+        if (!is_array($pending) || $pending['until'] < time()) {
+            unset($_SESSION['pending_2fa']);
+            throw HttpException::unauthorized('Log in again');
+        }
+        $twoFactor = new TwoFactor();
+        $userId = (int) $pending['user_id'];
+        if (!$twoFactor->check($userId, $r->string('code'))) {
+            $_SESSION['pending_2fa']['tries'] = $pending['tries'] + 1;
+            RateLimiter::record($r->ip(), (string) $pending['email'], false);
+            if ($_SESSION['pending_2fa']['tries'] >= 5) {
+                unset($_SESSION['pending_2fa']);
+                throw HttpException::tooMany('Too many wrong codes, log in again');
+            }
+            throw HttpException::badRequest('Wrong code');
+        }
+        unset($_SESSION['pending_2fa']);
+        if ($r->input('remember')) {
+            $twoFactor->trustThisDevice($userId, $r->header('User-Agent'));
+        }
         $this->users->touchLogin($userId);
         $csrf = Auth::login($userId);
         $this->respondWithSession($userId, $csrf);
@@ -97,6 +137,7 @@ final class AuthController
     {
         $user = $this->users->find($userId);
         $user['is_admin'] = Auth::isAdmin($userId);
+        $user['two_factor'] = (new TwoFactor())->enabled($userId);
         Response::json([
             'user'     => $user,
             'accounts' => array_map([AccountRepository::class, 'toPublic'], $this->accounts->forUser($userId)),

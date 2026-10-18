@@ -37,7 +37,7 @@ final class AdminController
         $count = static fn (string $sql, array $p = []) => (int) (Database::one($sql, $p)['c'] ?? 0);
 
         $extensions = [];
-        foreach (['mbstring', 'openssl', 'sodium', 'pdo_mysql', 'iconv', 'fileinfo', 'zip', 'libxml'] as $ext) {
+        foreach (['mbstring', 'openssl', 'sodium', 'pdo_mysql', 'iconv', 'fileinfo', 'zip', 'libxml', 'curl'] as $ext) {
             $extensions[$ext] = extension_loaded($ext);
         }
 
@@ -66,6 +66,8 @@ final class AdminController
                 'failed_24h'     => $count('SELECT COUNT(*) c FROM login_attempts WHERE success = 0 AND attempted_at > ?', [$since]),
             ],
             'debug'       => (bool) Config::get('debug'),
+            'cron'        => \Postvak\Cron\CronRunner::lastRun(),
+            'push_devices' => $count('SELECT COUNT(*) c FROM push_subscriptions'),
         ]);
     }
 
@@ -126,6 +128,7 @@ final class AdminController
             'created_at'    => $u['created_at'],
             'last_login_at' => $u['last_login_at'],
             'blocked'       => !empty($u['blocked']),
+            'two_factor'    => !empty($u['totp_enabled_at']),
             'is_admin'      => Auth::isAdmin((int) $u['id']),
             'accounts'      => $byUser[(int) $u['id']] ?? [],
         ], $users));
@@ -145,6 +148,18 @@ final class AdminController
         $blocked = (bool) $r->input('blocked', false);
         Database::run('UPDATE users SET blocked = ? WHERE id = ?', [$blocked ? 1 : 0, $id]);
         Response::json(['id' => $id, 'blocked' => $blocked]);
+    }
+
+    /** POST /admin/users/{id}/reset-2fa — for someone who lost their phone and recovery codes. */
+    public function resetTwoFactor(Request $r): void
+    {
+        Auth::requireAdmin();
+        $id = $r->intParam('id');
+        if (Database::one('SELECT id FROM users WHERE id = ?', [$id]) === null) {
+            throw HttpException::notFound('User not found');
+        }
+        (new \Postvak\Security\TwoFactor())->reset($id);
+        Response::json(['id' => $id, 'two_factor' => false]);
     }
 
     /** DELETE /admin/users/{id} — removes the user, their accounts and settings from Postvak (not their mail). */

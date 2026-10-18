@@ -71,7 +71,9 @@ final class Migrator
     /** Split a SQL file into statements (no stored procedures, so ";" at line end is enough). */
     private static function statements(string $sql): array
     {
-        $sql = preg_replace('/^\s*--.*$/m', '', $sql) ?? $sql;
+        // Remove "-- comments", also at the end of a line (a ";" before such a comment must still end the
+        // statement, otherwise two statements run as one and MySQL silently skips errors in the second).
+        $sql = preg_replace('/(^|\s)--(\s.*)?$/m', '', $sql) ?? $sql;
         $parts = preg_split('/;\s*(\r?\n|$)/', $sql) ?: [];
         return array_values(array_filter(array_map('trim', $parts), static fn ($s) => $s !== ''));
     }

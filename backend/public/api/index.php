@@ -9,7 +9,7 @@ declare(strict_types=1);
  * script fills in the right relative path. Default: the backend folder in this repo.
  */
 
-const POSTVAK_VERSION = '0.3.0';
+const POSTVAK_VERSION = '1.0.0';
 
 $appDir = getenv('POSTVAK_APP') ?: (is_file(__DIR__ . '/app-path.php') ? require __DIR__ . '/app-path.php' : __DIR__ . '/../..');
 
@@ -26,7 +26,8 @@ header('X-Frame-Options: DENY');
 $request = Request::fromGlobals();
 
 Auth::start();
-if ($request->path !== '/auth/login') {
+// No CSRF token exists yet before the login is complete (the session cookie is SameSite=Strict).
+if (!in_array($request->path, ['/auth/login', '/auth/2fa'], true)) {
     Auth::checkCsrf($request);
 }
 

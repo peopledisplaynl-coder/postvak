@@ -1,11 +1,12 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { useSwipe } from '../composables/useSwipe.js'
 import { useSession } from '../stores/session.js'
-import { useMail } from '../stores/mail.js'
-import { listDate, displayName, avatarColor, initials } from '../format.js'
-import { t } from '../i18n/index.js'
+import { useMail, msgKey, uidsOf } from '../stores/mail.js'
+import { useToasts } from '../stores/toasts.js'
+import { listDate, laterDate, displayName, avatarColor, initials } from '../format.js'
+import { t, locale } from '../i18n/index.js'
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -19,7 +20,9 @@ const mail = useMail()
 const leftAction = computed(() => session.settings.swipe_left ?? 'trash')
 const rightAction = computed(() => session.settings.swipe_right ?? 'archive')
 
-const selected = computed(() => mail.selected.includes(props.message.uid))
+const key = computed(() => msgKey(props.message))
+const selected = computed(() => mail.selected.includes(key.value))
+const account = computed(() => session.accountById(props.message.account_id))
 
 const { offset, dragging, flying, direction, progress, armed, handlers: swipe } = useSwipe({
   // No swiping while selecting several messages.
@@ -39,21 +42,38 @@ const revealAction = computed(() => (direction.value === 'left' ? leftAction.val
 const actionColor = {
   archive: 'var(--color-archive)',
   trash: 'var(--color-danger)',
+  junk: 'var(--color-junk)',
+  snooze: 'var(--color-snooze)',
   read: 'var(--color-read)',
   flag: 'var(--color-flag)',
   none: 'var(--color-muted)',
 }
 const revealIcon = computed(() => {
   if (revealAction.value === 'read') return props.message.seen ? 'unread' : 'read'
+  if (revealAction.value === 'junk' && mail.folderRole === 'junk') return 'inbox'
   return revealAction.value
 })
 
 const person = computed(() => {
   // In Sent and Drafts, show the recipient instead of yourself.
   const role = mail.folderRole
-  if ((role === 'sent' || role === 'drafts') && props.message.to?.length) return props.message.to[0]
+  if ((role === 'sent' || role === 'drafts' || role === 'scheduled') && props.message.to?.length) return props.message.to[0]
   return props.message.from
 })
+
+// Conversation: "Peter, ik, Anja" (first names when there are several people) + count.
+const isThread = computed(() => (props.message.thread?.count ?? 1) > 1)
+const senderLabel = computed(() => {
+  const people = props.message.thread?.participants ?? []
+  if (!isThread.value || !people.length) return displayName(person.value)
+  const short = people.length > 1
+  const names = people.map((p) => (p.me ? t('list.me') : short ? (p.name || p.email).split(/[\s@]/)[0] : p.name || p.email))
+  return names.length > 3 ? `${names[0]} … ${names.slice(-2).join(', ')}` : names.join(', ')
+})
+
+// Scheduled: when it will be sent. Snoozed: when it comes back.
+const laterAt = computed(() => props.message.scheduled?.send_at ?? props.message.snoozed_until ?? null)
+const canSnooze = computed(() => !['drafts', 'sent', 'scheduled', 'snoozed'].includes(mail.folderRole))
 
 const compact = computed(() => session.settings.density === 'compact')
 
@@ -67,7 +87,40 @@ let pressStart = null
 let longPressed = false
 let dragged = false // pointer moved: the following click is not a tap
 
+// ---- drag to a folder (mouse only: touch uses swipe and long press)
+const draggable = ref(false)
+const beingDragged = ref(false)
+
+function onDragstart(e) {
+  const drag = mail.startDrag(props.message)
+  if (drag.accountId === null) {
+    // Mixed accounts (unified inbox): a folder belongs to one account.
+    e.preventDefault()
+    mail.endDrag()
+    useToasts().show(t('list.moveOneAccount'))
+    return
+  }
+  beingDragged.value = true
+  e.dataTransfer.effectAllowed = 'move'
+  e.dataTransfer.setData('application/x-postvak-messages', String(drag.messages.length))
+  e.dataTransfer.setData('text/plain', drag.messages.map((m) => m.subject || '').join('\n'))
+  // A compact label instead of a ghost of the whole row.
+  const n = drag.messages.flatMap(uidsOf).length
+  const ghost = document.createElement('div')
+  ghost.textContent = n > 1 ? t('list.dragMany', { n }) : (props.message.subject || t('list.noSubject'))
+  ghost.style.cssText = 'position:fixed;top:-1000px;left:0;max-width:260px;padding:6px 12px;border-radius:9999px;' +
+    'background:var(--color-accent);color:#fff;font:500 13px/1.4 var(--font-sans,sans-serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
+  document.body.appendChild(ghost)
+  e.dataTransfer.setDragImage(ghost, 16, 16)
+  setTimeout(() => ghost.remove(), 0)
+}
+function onDragend() {
+  beingDragged.value = false
+  mail.endDrag()
+}
+
 function onPointerdown(e) {
+  draggable.value = e.pointerType === 'mouse' && e.button === 0
   swipe.onPointerdown(e)
   dragged = false
   if (e.pointerType === 'mouse') return
@@ -77,7 +130,7 @@ function onPointerdown(e) {
   pressTimer = setTimeout(() => {
     longPressed = true
     navigator.vibrate?.(15)
-    mail.toggleSelect(props.message.uid)
+    mail.toggleSelect(key.value)
   }, 450)
 }
 function onPointermove(e) {
@@ -105,7 +158,7 @@ function onClick() {
     dragged = false
     return
   }
-  if (mail.selecting) mail.toggleSelect(props.message.uid)
+  if (mail.selecting) mail.toggleSelect(key.value)
   else emit('open', props.message)
 }
 </script>
@@ -124,7 +177,7 @@ function onClick() {
         :style="{ transform: `scale(${armed ? 1.15 : 0.8 + progress * 0.2})` }"
       >
         <AppIcon :name="revealIcon" :size="24" />
-        <span class="text-sm">{{ t(`actions.${revealAction}`) }}</span>
+        <span class="text-sm">{{ revealAction === 'junk' && mail.folderRole === 'junk' ? t('actions.notJunk') : t(`actions.${revealAction}`) }}</span>
       </span>
     </div>
 
@@ -138,15 +191,19 @@ function onClick() {
         compact ? 'py-2' : 'py-3',
         selected || active ? 'bg-accent-soft' : 'bg-surface hover:bg-sunken/60',
         !dragging ? 'transition-transform duration-200 ease-out' : '',
+        beingDragged || (mail.drag && selected) ? 'opacity-50' : '',
       ]"
       :style="{ transform: `translateX(${offset}px)` }"
+      :draggable="draggable"
+      @dragstart="onDragstart"
+      @dragend="onDragend"
       @pointerdown="onPointerdown"
       @pointermove="onPointermove"
       @pointerup="onPointerup"
       @pointercancel="onPointercancel"
       @click="onClick"
       @keydown.enter="onClick"
-      @keydown.space.prevent="mail.toggleSelect(message.uid)"
+      @keydown.space.prevent="mail.toggleSelect(key)"
     >
       <!-- Avatar doubles as the select checkbox (click it on desktop, long press on touch) -->
       <button
@@ -155,7 +212,7 @@ function onClick() {
         class="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white transition"
         :style="{ background: selected ? 'var(--color-accent)' : avatarColor(person?.email) }"
         :aria-label="t('list.select')"
-        @click.stop="mail.toggleSelect(message.uid)"
+        @click.stop="mail.toggleSelect(key)"
       >
         <AppIcon v-if="selected" name="check" :size="20" />
         <span v-else>{{ initials(person) }}</span>
@@ -166,7 +223,7 @@ function onClick() {
         class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md ring-1 transition"
         :class="selected ? 'bg-accent text-white ring-accent' : 'text-transparent ring-line group-hover:ring-muted'"
         :aria-label="t('list.select')"
-        @click.stop="mail.toggleSelect(message.uid)"
+        @click.stop="mail.toggleSelect(key)"
       >
         <AppIcon name="check" :size="14" />
       </button>
@@ -179,9 +236,20 @@ function onClick() {
             :aria-label="t('actions.markUnread')"
           />
           <span class="truncate" :class="message.seen ? 'text-ink/80' : 'font-semibold'">
-            {{ displayName(person) }}
+            {{ senderLabel }}
           </span>
-          <span class="ml-auto shrink-0 text-xs tabular-nums" :class="message.seen ? 'text-muted' : 'text-accent font-medium'">
+          <span v-if="isThread" class="shrink-0 text-xs tabular-nums text-muted" :title="t('list.inConversation', { n: message.thread.count })">{{ message.thread.count }}</span>
+          <span
+            v-if="mail.unified && account"
+            class="size-2 shrink-0 self-center rounded-full"
+            :style="{ background: account.color || 'var(--color-accent)' }"
+            :title="account.email"
+          />
+          <span v-if="laterAt" class="ml-auto flex shrink-0 items-center gap-1 text-xs tabular-nums text-snooze" :title="t(message.scheduled ? 'later.scheduledBanner' : 'later.snoozedBanner', { date: new Date(laterAt).toLocaleString(locale()) })">
+            <AppIcon :name="message.scheduled ? 'scheduled' : 'clock'" :size="13" />
+            {{ laterDate(laterAt) }}
+          </span>
+          <span v-else class="ml-auto shrink-0 text-xs tabular-nums" :class="message.seen ? 'text-muted' : 'text-accent font-medium'">
             {{ listDate(message.date) }}
           </span>
         </div>
@@ -206,6 +274,9 @@ function onClick() {
         </button>
         <button class="rounded-md p-1.5 text-muted hover:bg-sunken hover:text-danger" :title="t('actions.trash')" @click.stop="quick('trash')">
           <AppIcon name="trash" :size="18" />
+        </button>
+        <button v-if="canSnooze" class="rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.snooze')" @click.stop="quick('snooze')">
+          <AppIcon name="clock" :size="18" />
         </button>
         <button class="rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.read')" @click.stop="quick('read')">
           <AppIcon :name="message.seen ? 'unread' : 'read'" :size="18" />

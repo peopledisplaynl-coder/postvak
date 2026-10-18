@@ -1,4 +1,5 @@
 import { mockRequest } from './mock.js'
+import { t } from '../i18n/index.js'
 
 const USE_MOCK = import.meta.env.VITE_MOCK === 'true'
 // Absolute path: a relative "api" would resolve to /mail/api/... on deeper pages.
@@ -55,7 +56,7 @@ export async function request(method, path, { body, form, query, keepalive } = {
   } catch {
     // The server sent something that is not JSON (PHP error page, timeout, proxy message).
     console.error(`[postvak] ${method} ${path} → ${res.status}, invalid JSON:`, text.slice(0, 500))
-    throw new ApiError(res.status, `ongeldig antwoord van de server (${res.status})`)
+    throw new ApiError(res.status, t('errors.invalidResponse', { status: res.status }))
   }
   if (!res.ok) {
     if (res.status === 401 && path !== '/auth/login') onUnauthorized()

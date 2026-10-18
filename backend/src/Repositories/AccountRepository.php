@@ -16,7 +16,7 @@ final class AccountRepository
         'imap_host', 'imap_port', 'imap_encryption',
         'smtp_host', 'smtp_port', 'smtp_encryption', 'username',
         'archive_folder', 'trash_folder', 'sent_folder', 'drafts_folder', 'junk_folder',
-        'signature_html',
+        'signature_html', 'notify',
     ];
 
     public function forUser(int $userId): array
@@ -87,6 +87,8 @@ final class AccountRepository
         $row['sort_order'] = (int) $row['sort_order'];
         $row['imap_port'] = (int) $row['imap_port'];
         $row['smtp_port'] = (int) $row['smtp_port'];
+        $row['notify'] = (bool) ($row['notify'] ?? true);
+        unset($row['notify_uidvalidity'], $row['notify_last_uid']);
         return $row;
     }
 }

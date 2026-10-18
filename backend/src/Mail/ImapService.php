@@ -81,7 +81,7 @@ final class ImapService
         unset($item);
 
         // INBOX first, then special folders, then the rest alphabetically.
-        $order = ['inbox' => 0, 'drafts' => 1, 'sent' => 2, 'archive' => 3, 'junk' => 4, 'trash' => 5];
+        $order = ['inbox' => 0, 'snoozed' => 1, 'drafts' => 2, 'scheduled' => 3, 'sent' => 4, 'archive' => 5, 'junk' => 6, 'trash' => 7];
         usort($list, static fn ($a, $b) =>
             [($order[$a['role']] ?? 9), mb_strtolower($a['full_name'])] <=> [($order[$b['role']] ?? 9), mb_strtolower($b['full_name'])]
         );
@@ -99,7 +99,7 @@ final class ImapService
         if (!$create || !isset(FolderResolver::CREATE_DEFAULTS[$role])) {
             return null;
         }
-        $name = FolderResolver::CREATE_DEFAULTS[$role];
+        $name = $this->ownFolderName($role) ?? FolderResolver::CREATE_DEFAULTS[$role];
         // Servers with the "INBOX." namespace (common with Dovecot/cPanel/DirectAdmin) need the prefix.
         $inbox = $this->findFolder('INBOX');
         if ($inbox && $this->usesInboxNamespace()) {
@@ -108,6 +108,25 @@ final class ImapService
         $this->client->createFolder($name, false);
         $this->folderCache = null;
         return $name;
+    }
+
+    /**
+     * Name for Postvak's own folders (send later, snooze) in the user's language:
+     * the language setting, or the browser's language when it is "auto".
+     */
+    private function ownFolderName(string $role): ?string
+    {
+        $names = ['scheduled' => ['nl' => 'Gepland', 'en' => 'Scheduled'], 'snoozed' => ['nl' => 'Gesnoozed', 'en' => 'Snoozed']];
+        if (!isset($names[$role])) {
+            return null;
+        }
+        $lang = 'nl';
+        try {
+            $setting = (new \Postvak\Repositories\SettingsRepository())->get((int) $this->account['user_id'])['language'] ?? 'auto';
+            $lang = $setting !== 'auto' ? $setting : (str_starts_with(strtolower((string) ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? 'nl')), 'nl') ? 'nl' : 'en');
+        } catch (Throwable) {
+        }
+        return $names[$role][$lang] ?? $names[$role]['en'];
     }
 
     /** Create a folder; returns its path. Lands under INBOX on servers that use the INBOX. namespace. */
@@ -286,6 +305,364 @@ final class ImapService
         return $known + $new;
     }
 
+    // ------------------------------------------------- raw messages, Message-ID
+
+    /** The complete raw message (RFC 822), without setting \Seen. */
+    public function fetchRaw(string $folderPath, int $uid): string
+    {
+        $folder = $this->folder($folderPath);
+        $this->client->openFolder($folder->path, true);
+        $data = $this->client->getConnection()->fetch(['UID', 'BODY.PEEK[]'], [$uid], null, IMAP::ST_UID)->validatedData();
+        foreach ((array) ($data[$uid] ?? []) as $key => $value) {
+            if (is_string($key) && str_starts_with($key, 'BODY[')) {
+                return (string) $value;
+            }
+        }
+        throw HttpException::notFound('Message not found');
+    }
+
+    /** UIDs in a folder with this Message-ID header. @return int[] */
+    public function uidsByMessageId(string $folderPath, string $messageId): array
+    {
+        $folder = $this->folder($folderPath);
+        $this->client->openFolder($folder->path, true);
+        $found = $this->client->getConnection()->search(['HEADER', 'Message-ID', $this->imapString($messageId)], IMAP::ST_UID)->validatedData();
+        return array_map('intval', is_array($found) ? $found : []);
+    }
+
+    /** Summaries (incl. message_id) of the given messages. */
+    public function summaries(string $folderPath, array $uids): array
+    {
+        $folder = $this->folder($folderPath);
+        $selected = $this->client->openFolder($folder->path, true);
+        return $uids === [] ? [] : $this->summariesWithIds($folderPath, (int) ($selected['uidvalidity'] ?? 0), array_map('intval', $uids), null);
+    }
+
+    // ------------------------------------------------------------ new mail check
+
+    /** [uidvalidity, uidnext] of the inbox (cheap: one SELECT). */
+    public function inboxState(): array
+    {
+        $folder = $this->folder('INBOX');
+        $status = $this->client->openFolder($folder->path, true);
+        $validity = (int) ($status['uidvalidity'] ?? 0);
+        $next = (int) ($status['uidnext'] ?? 0);
+        if ($next === 0) {
+            // Server without UIDNEXT in the SELECT answer: highest uid + 1.
+            $all = $this->client->getConnection()->search(['ALL'], IMAP::ST_UID)->validatedData();
+            $next = (is_array($all) && $all !== [] ? max(array_map('intval', $all)) : 0) + 1;
+        }
+        return [$validity, $next];
+    }
+
+    /**
+     * Unread inbox messages with a uid above $afterUid, newest first (call inboxState() first).
+     * @return array{total:int, messages:array}
+     */
+    public function unseenSince(int $afterUid, int $limit = 3): array
+    {
+        $conn = $this->client->getConnection();
+        $found = $conn->search(['UID', ($afterUid + 1) . ':*', 'UNSEEN'], IMAP::ST_UID)->validatedData();
+        // "n:*" always includes the highest uid, even when it is lower than n.
+        $uids = array_values(array_filter(array_map('intval', is_array($found) ? $found : []), static fn ($u) => $u > $afterUid));
+        rsort($uids);
+        $take = array_slice($uids, 0, $limit);
+        $messages = [];
+        if ($take !== []) {
+            $headers = $conn->headers($take, 'RFC822', IMAP::ST_UID)->validatedData();
+            $snippets = $this->snippets('INBOX', 0, $take, $headers, null);
+            foreach ($take as $uid) {
+                if (isset($headers[$uid])) {
+                    $m = $this->summaryFromHeader($uid, (string) $headers[$uid], [], 'INBOX');
+                    $m['snippet'] = $snippets[$uid] ?? '';
+                    $messages[] = $m;
+                }
+            }
+        }
+        return ['total' => count($uids), 'messages' => $messages];
+    }
+
+    // ------------------------------------------------------------ conversations
+
+    /** Most messages of one conversation whose headers are fetched for the list row. */
+    private const THREAD_HEADERS = 10;
+
+    /** Most messages shown in the conversation view. */
+    private const CONVERSATION_MAX = 100;
+
+    private ?string $threadAlgorithm = null;
+
+    /** THREAD algorithm the server supports (REFS preferred), or '' when it has none. */
+    private function threadAlgorithm(): string
+    {
+        if ($this->threadAlgorithm === null) {
+            $this->threadAlgorithm = '';
+            try {
+                $caps = array_map('strtoupper', (array) $this->client->getConnection()->getCapabilities()->validatedData());
+                foreach (['REFS', 'REFERENCES'] as $alg) {
+                    if (in_array("THREAD=$alg", $caps, true)) {
+                        $this->threadAlgorithm = $alg;
+                        break;
+                    }
+                }
+            } catch (Throwable $e) {
+                error_log('[postvak] CAPABILITY failed: ' . $e->getMessage());
+            }
+        }
+        return $this->threadAlgorithm;
+    }
+
+    /**
+     * Conversations in the selected folder as lists of UIDs (IMAP THREAD), or null
+     * when the server cannot thread.
+     *
+     * @return array<int, int[]>|null
+     */
+    private function threadUids(?string $search): ?array
+    {
+        $alg = $this->threadAlgorithm();
+        if ($alg === '') {
+            return null;
+        }
+        try {
+            // Unparsed: the library's tokenizer does not handle THREAD's nested lists.
+            $lines = $this->client->getConnection()
+                ->requestAndResponse('UID THREAD', [$alg, 'UTF-8', ...$this->searchCriteria($search)], true)
+                ->data();
+        } catch (Throwable $e) {
+            error_log('[postvak] THREAD failed: ' . $e->getMessage());
+            return null;
+        }
+        foreach ((array) $lines as $line) {
+            if (is_string($line) && preg_match('/^\*?\s*THREAD\b(.*)$/is', trim($line), $m)) {
+                return self::parseThreads($m[1]);
+            }
+        }
+        return [];
+    }
+
+    /**
+     * "(1)(2 3 (4 5)(6))" -> [[1], [2, 3, 4, 5, 6]]: every top-level group is one conversation.
+     * @return array<int, int[]>
+     */
+    public static function parseThreads(string $text): array
+    {
+        $threads = [];
+        $depth = 0;
+        $current = [];
+        foreach (preg_split('/([()])|\s+/', $text, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY) ?: [] as $token) {
+            if ($token === '(') {
+                $depth++;
+            } elseif ($token === ')') {
+                $depth = max(0, $depth - 1);
+                if ($depth === 0 && $current !== []) {
+                    $threads[] = $current;
+                    $current = [];
+                }
+            } elseif ($depth > 0 && ctype_digit($token)) {
+                $current[] = (int) $token;
+            }
+        }
+        return $threads;
+    }
+
+    /**
+     * One page of conversations: one row per conversation, in the order of its newest
+     * message (same order as the flat list sorted by date). Each row is the summary of
+     * the newest message plus a "thread" block. Falls back to the flat list when the
+     * server cannot thread ("threaded" => false).
+     */
+    public function listThreads(string $folderPath, int $page = 1, int $perPage = 50, ?string $search = null, ?SnippetCache $cache = null): array
+    {
+        $folder = $this->folder($folderPath);
+        $selected = $this->client->openFolder($folder->path, true);
+        $uidvalidity = (int) ($selected['uidvalidity'] ?? 0);
+
+        $threads = $this->threadUids($search);
+        if ($threads === null) {
+            return $this->listMessages($folderPath, $page, $perPage, $search, 'date_desc', $cache) + ['threaded' => false];
+        }
+
+        // Newest first, by the same date order as the normal list.
+        $rank = array_flip($this->sortedUids('date_desc', $search));
+        $missing = PHP_INT_MAX;
+        foreach ($threads as &$uids) {
+            usort($uids, static fn ($a, $b) => ($rank[$a] ?? $missing) <=> ($rank[$b] ?? $missing) ?: $b <=> $a);
+        }
+        unset($uids);
+        usort($threads, static fn ($a, $b) => ($rank[$a[0]] ?? $missing) <=> ($rank[$b[0]] ?? $missing) ?: $b[0] <=> $a[0]);
+
+        $total = count($threads);
+        $pageThreads = array_slice($threads, ($page - 1) * $perPage, $perPage);
+
+        $messages = [];
+        if ($pageThreads !== []) {
+            $headerUids = array_merge(...array_map(static fn ($t) => array_slice($t, 0, self::THREAD_HEADERS), $pageThreads));
+            $allUids = array_merge(...$pageThreads);
+            $conn = $this->client->getConnection();
+            $headers = $conn->headers($headerUids, 'RFC822', IMAP::ST_UID)->validatedData();
+            $flags = $conn->flags($allUids, IMAP::ST_UID)->validatedData();
+            $newest = [];
+            foreach ($pageThreads as $i => $uids) {
+                foreach ($uids as $uid) {
+                    if (isset($headers[$uid])) {
+                        $newest[$i] = $uid;
+                        break;
+                    }
+                }
+            }
+            $snippets = $this->snippets($folderPath, $uidvalidity, array_values($newest), $headers, $cache);
+
+            foreach ($pageThreads as $i => $uids) {
+                if (!isset($newest[$i])) {
+                    continue; // deleted in the meantime
+                }
+                $top = $newest[$i];
+                $row = $this->summaryFromHeader($top, (string) $headers[$top], (array) ($flags[$top] ?? []), $folderPath);
+                $row['snippet'] = $snippets[$top] ?? '';
+                $row['thread'] = $this->threadInfo($uids, $headers, $flags);
+                $row['seen'] = $row['thread']['unseen'] === 0;
+                $row['flagged'] = $row['flagged'] || $row['thread']['flagged'];
+                $messages[] = $row;
+            }
+        }
+
+        return ['total' => $total, 'page' => $page, 'per_page' => $perPage, 'sort' => 'date_desc', 'threaded' => true, 'messages' => $messages];
+    }
+
+    /** Count, unread count and participants of a conversation (uids newest first). */
+    private function threadInfo(array $uids, array $headers, array $flags): array
+    {
+        $unseen = 0;
+        $flagged = false;
+        foreach ($uids as $uid) {
+            $f = strtolower(implode(' ', self::flatten((array) ($flags[$uid] ?? []))));
+            if (!str_contains($f, '\\seen')) {
+                $unseen++;
+            }
+            $flagged = $flagged || str_contains($f, '\\flagged');
+        }
+
+        // Participants in order of their first message, like "Peter, ik, Anja".
+        $own = strtolower((string) $this->account['email']);
+        $people = [];
+        foreach (array_reverse(array_slice($uids, 0, self::THREAD_HEADERS)) as $uid) {
+            if (!isset($headers[$uid]) || !preg_match('/^From:\s*(.+(?:\r?\n[ \t].+)*)/mi', (string) $headers[$uid], $m)) {
+                continue;
+            }
+            [$name, $email] = self::parseAddress($m[1]);
+            if ($email === '' || isset($people[$email])) {
+                continue;
+            }
+            $people[$email] = ['name' => $name, 'email' => $email, 'me' => $email === $own];
+        }
+
+        return [
+            'count'        => count($uids),
+            'uids'         => $uids,
+            'unseen'       => $unseen,
+            'flagged'      => $flagged,
+            'participants' => array_values($people),
+        ];
+    }
+
+    /**
+     * All messages of the conversation that $uid belongs to, oldest first: the ones in
+     * this folder plus your own replies in the Sent folder.
+     *
+     * @return array<int, array<string, mixed>> message summaries (each with its own "folder")
+     */
+    public function conversation(string $folderPath, int $uid, ?SnippetCache $cache = null): array
+    {
+        $folder = $this->folder($folderPath);
+        $selected = $this->client->openFolder($folder->path, true);
+        $uids = [$uid];
+        foreach ($this->threadUids(null) ?? [] as $thread) {
+            if (in_array($uid, $thread, true)) {
+                $uids = $thread;
+                break;
+            }
+        }
+        rsort($uids);
+        $uids = array_slice($uids, 0, self::CONVERSATION_MAX);
+
+        $items = $this->summariesWithIds($folderPath, (int) ($selected['uidvalidity'] ?? 0), $uids, $cache);
+
+        // Your replies live in Sent. Find them by the message ids of this conversation.
+        $sent = $this->roleFolder('sent', false);
+        if ($sent && $sent !== $folderPath && count($items) < self::CONVERSATION_MAX) {
+            $ids = array_slice(array_values(array_unique(array_filter(array_column($items, 'message_id')))), 0, 20);
+            if ($ids !== []) {
+                try {
+                    $sentFolder = $this->folder($sent);
+                    $sel = $this->client->openFolder($sentFolder->path, true);
+                    $criteria = [];
+                    foreach ($ids as $id) {
+                        $q = $this->imapString($id);
+                        $criteria[] = ['OR', 'HEADER', 'In-Reply-To', $q, 'HEADER', 'References', $q];
+                    }
+                    $or = array_fill(0, count($criteria) - 1, 'OR');
+                    $found = $this->client->getConnection()->search([...$or, ...array_merge(...$criteria)], IMAP::ST_UID)->validatedData();
+                    $found = array_map('intval', is_array($found) ? $found : []);
+                    rsort($found);
+                    $found = array_slice($found, 0, self::CONVERSATION_MAX - count($items));
+                    if ($found !== []) {
+                        array_push($items, ...$this->summariesWithIds($sent, (int) ($sel['uidvalidity'] ?? 0), $found, $cache));
+                    }
+                } catch (Throwable $e) {
+                    error_log('[postvak] conversation: Sent search failed: ' . $e->getMessage());
+                }
+            }
+        }
+
+        usort($items, static fn ($a, $b) => strcmp((string) $a['date'], (string) $b['date']) ?: $a['uid'] <=> $b['uid']);
+        return $items;
+    }
+
+    /** Summaries (with snippet and Message-ID) of messages in the currently selected folder. */
+    private function summariesWithIds(string $folderPath, int $uidvalidity, array $uids, ?SnippetCache $cache): array
+    {
+        $conn = $this->client->getConnection();
+        $headers = $conn->headers($uids, 'RFC822', IMAP::ST_UID)->validatedData();
+        $flags = $conn->flags($uids, IMAP::ST_UID)->validatedData();
+        $snippets = $this->snippets($folderPath, $uidvalidity, $uids, $headers, $cache);
+        $out = [];
+        foreach ($uids as $uid) {
+            if (!isset($headers[$uid])) {
+                continue;
+            }
+            $summary = $this->summaryFromHeader($uid, (string) $headers[$uid], (array) ($flags[$uid] ?? []), $folderPath);
+            $summary['snippet'] = $snippets[$uid] ?? '';
+            $summary['message_id'] = preg_match('/^Message-ID:\s*(<[^>\s]+>)/mi', (string) $headers[$uid], $m) ? $m[1] : null;
+            $out[] = $summary;
+        }
+        return $out;
+    }
+
+    /** '"Jan de Vries" <jan@x.nl>' -> ['Jan de Vries', 'jan@x.nl'] (MIME words decoded). */
+    private static function parseAddress(string $value): array
+    {
+        $value = trim(preg_replace('/\r?\n[ \t]+/', ' ', $value) ?? $value);
+        $decoded = function_exists('iconv_mime_decode') ? @iconv_mime_decode($value, ICONV_MIME_DECODE_CONTINUE_ON_ERROR, 'UTF-8') : false;
+        if (is_string($decoded) && $decoded !== '') {
+            $value = $decoded;
+        }
+        if (preg_match('/^(.*?)<([^>]+)>/', $value, $m)) {
+            return [trim($m[1], " \t\"'"), strtolower(trim($m[2]))];
+        }
+        return ['', strtolower(trim($value, " \t<>"))];
+    }
+
+    /** @return string[] */
+    private static function flatten(array $value): array
+    {
+        $out = [];
+        array_walk_recursive($value, static function ($v) use (&$out) {
+            $out[] = (string) $v;
+        });
+        return $out;
+    }
+
     /** All matching UIDs in the requested order. Falls back to UID order if the server lacks SORT. */
     private function sortedUids(string $sort, ?string $search): array
     {
@@ -310,7 +687,15 @@ final class ImapService
         return $ids;
     }
 
-    /** IMAP search criteria: everything, or the text in sender, recipient or subject. */
+    /** Also search the message text (slower on servers without a full-text index). */
+    private bool $searchInBody = false;
+
+    public function setSearchInBody(bool $on): void
+    {
+        $this->searchInBody = $on;
+    }
+
+    /** IMAP search criteria: everything, or the text in sender, recipient, subject (and body). */
     private function searchCriteria(?string $search): array
     {
         $search = trim((string) $search);
@@ -318,7 +703,9 @@ final class ImapService
             return ['ALL'];
         }
         $q = $this->imapString($search);
-        return ['OR', 'OR', 'FROM', $q, 'TO', $q, 'SUBJECT', $q];
+        return $this->searchInBody
+            ? ['OR', 'OR', 'OR', 'FROM', $q, 'TO', $q, 'SUBJECT', $q, 'BODY', $q]
+            : ['OR', 'OR', 'FROM', $q, 'TO', $q, 'SUBJECT', $q];
     }
 
     /** Quoted string for plain ASCII, literal {n} for anything else (UTF-8). */
@@ -351,7 +738,8 @@ final class ImapService
             $to = self::addresses($header->get('to'));
             $contentType = strtolower((string) $header->get('content_type'));
             try {
-                $date = $header->get('date')->toDate()->toIso8601String();
+                // UTC, so dates from different senders sort correctly as text.
+                $date = $header->get('date')->toDate()->utc()->toIso8601String();
             } catch (Throwable) {
             }
         } catch (Throwable $e) {
@@ -360,6 +748,8 @@ final class ImapService
 
         return [
             'uid'             => $uid,
+            'message_id'      => preg_match('/^Message-ID:\s*(<[^>\s]+>)/mi', $rawHeader, $mid) ? $mid[1] : null,
+            'account_id'      => (int) $this->account['id'],
             'folder'          => $folderPath,
             'subject'         => $subject,
             'from'            => $from,
@@ -403,7 +793,7 @@ final class ImapService
      */
     public function setFlags(string $folderPath, array $uids, array $flags): void
     {
-        $map = ['seen' => '\\Seen', 'flagged' => '\\Flagged', 'answered' => '\\Answered'];
+        $map = ['seen' => '\\Seen', 'flagged' => '\\Flagged', 'answered' => '\\Answered', 'draft' => '\\Draft'];
         $folder = $this->folder($folderPath);
         $this->client->openFolder($folder->path, true);
         $conn = $this->client->getConnection();
@@ -427,6 +817,68 @@ final class ImapService
             $conn->store(['\\Deleted'], (int) $uid, null, '+', true, IMAP::ST_UID);
         }
         $conn->expunge();
+    }
+
+    /**
+     * Permanently delete every message in a folder (emptying trash / spam).
+     * @return int number of messages removed
+     */
+    public function emptyFolder(string $folderPath): int
+    {
+        $folder = $this->folder($folderPath);
+        $status = $this->client->openFolder($folder->path, true);
+        $exists = (int) ($status['exists'] ?? 0);
+        if ($exists === 0) {
+            return 0;
+        }
+        $conn = $this->client->getConnection();
+        // Sequence set 1:N of the folder as just selected; mail arriving later is not touched.
+        $conn->store(['\\Deleted'], 1, $exists, '+', true, IMAP::ST_MSGN);
+        $conn->expunge();
+        return $exists;
+    }
+
+    /** Mark every message in a folder as read. @return int number of messages in the folder */
+    public function markAllRead(string $folderPath): int
+    {
+        $folder = $this->folder($folderPath);
+        $status = $this->client->openFolder($folder->path, true);
+        $exists = (int) ($status['exists'] ?? 0);
+        if ($exists > 0) {
+            $this->client->getConnection()->store(['\\Seen'], 1, $exists, '+', true, IMAP::ST_MSGN);
+        }
+        return $exists;
+    }
+
+    /** UID of the newest message in a folder with the given header value (used to find a saved draft). */
+    public function findUidByHeader(string $folderPath, string $header, string $value): ?int
+    {
+        $folder = $this->folder($folderPath);
+        $this->client->openFolder($folder->path, true);
+        $ids = $this->client->getConnection()->search(['HEADER', $header, '"' . addcslashes($value, '"\\') . '"'], IMAP::ST_UID)->validatedData();
+        $ids = array_map('intval', is_array($ids) ? $ids : []);
+        return $ids ? max($ids) : null;
+    }
+
+    /**
+     * Attachments of a message by index (as listed by getMessage/present).
+     * @return array<int, array{name:string, mime:string, content:string}>
+     */
+    public function attachmentsOf(string $folderPath, int $uid, array $indexes): array
+    {
+        $message = $this->getMessage($folderPath, $uid);
+        $out = [];
+        $i = 0;
+        foreach ($message->getAttachments() as $att) {
+            if (in_array($i++, $indexes, true)) {
+                $out[] = [
+                    'name'    => (string) ($att->name ?: 'attachment'),
+                    'mime'    => (string) ($att->getMimeType() ?: 'application/octet-stream'),
+                    'content' => (string) $att->getContent(),
+                ];
+            }
+        }
+        return $out;
     }
 
     /** Store a raw RFC 822 message, e.g. a copy of a sent mail in the Sent folder. */

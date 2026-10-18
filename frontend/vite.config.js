@@ -10,7 +10,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg'],
+      includeAssets: ['icon.svg', 'badge-96.png', 'push-sw.js'],
       manifest: {
         name: 'Postvak',
         short_name: 'Postvak',
@@ -29,9 +29,15 @@ export default defineConfig({
         // Never cache API calls: mail must always come from the server.
         navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // Push notifications: handled in public/push-sw.js.
+        importScripts: ['push-sw.js'],
       },
     }),
   ],
+  test: {
+    include: ['src/**/*.test.js'],
+    environment: 'node',
+  },
   build: {
     outDir: '../backend/public',
     emptyOutDir: false, // keep api/ and .htaccess

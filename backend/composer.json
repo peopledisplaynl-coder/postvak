@@ -11,7 +11,8 @@
     "ext-sodium": "*",
     "webklex/php-imap": "^6.0",
     "phpmailer/phpmailer": "^6.9",
-    "ezyang/htmlpurifier": "^4.17"
+    "ezyang/htmlpurifier": "^4.17",
+    "sabre/dav": "^4.7"
   },
   "autoload": { "psr-4": { "Postvak\\": "src/" } },
   "config": { "optimize-autoloader": true, "sort-packages": true, "platform": { "php": "8.2.0" } }

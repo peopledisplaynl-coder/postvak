@@ -50,7 +50,7 @@ and every user has to log in again.
 
 ## 4. Cron job
 
-Notifications for new mail, send later and snooze need a background task every 5 minutes:
+Notifications for new mail, calendar reminders, send later and snooze need a background task every 5 minutes:
 
 - **Plesk:** Scheduled tasks → Add task → *Run a PHP script* → `app/cron.php`, same PHP version as the site, cron style `*/5 * * * *`.
 - **cPanel / DirectAdmin:** `php /home/you/app/cron.php` every 5 minutes.
@@ -64,11 +64,18 @@ Open `https://mail.example.com` and log in with a mailbox address and its passwo
 "Add to home screen" (iPhone) or "Install app" (Android). Notifications are turned on per device under
 Settings → Notifications.
 
+### Calendar and contacts on your phone
+
+Under **Settings → Calendar & tasks** you find the server address and your user name, and you create an app password
+per device. Instructions for iPhone, Android (DAVx5), macOS and Thunderbird are on that page; contacts sync over the same server (CardDAV). If a phone can't find
+the server, check that `.htaccess` from `public/` was uploaded: it passes the password on to PHP and points
+`/.well-known/caldav` to `/dav/`.
+
 ## Updating
 
 1. Download the new release.
 2. Upload `public/` and `app/` over the existing files. **Don't** upload `install.php` (or delete it afterwards), and keep `app/config/config.php`.
-3. Log in again: database changes are applied automatically.
+3. Open Postvak: database changes are applied automatically on the first visit.
 
 ## Problems
 

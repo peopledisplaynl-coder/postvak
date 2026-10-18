@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import AppIcon from './AppIcon.vue'
 import FolderPicker from './FolderPicker.vue'
 import MessageBody from './MessageBody.vue'
@@ -24,6 +25,23 @@ const emit = defineEmits(['back', 'reply', 'edit-draft'])
 const mail = useMail()
 const session = useSession()
 const toasts = useToasts()
+const router = useRouter()
+
+/** Mail → task: a task with a link back to this message. */
+async function makeTask() {
+  const s = summary.value
+  if (!s) return
+  try {
+    await api.post('/tasks', {
+      title: s.subject || t('list.noSubject'),
+      mail: { account_id: s.account_id, folder: s.folder, uid: s.uid, subject: s.subject, from: displayName(s.from) },
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    })
+    toasts.show(t('tasks.createdFromMail'), { action: { label: t('tasks.show'), run: () => router.push('/tasks') } })
+  } catch (e) {
+    toasts.error(t('toast.failed', { msg: e.message }))
+  }
+}
 
 const targetKey = computed(() => (props.target ? `${props.target.account_id}:${props.target.uid}` : null))
 const summary = computed(() => (targetKey.value ? mail.byKey(targetKey.value) : null))
@@ -181,6 +199,7 @@ function reply(payload) {
         <button v-if="role === 'snoozed'" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.unsnooze')" @click="unsnooze"><AppIcon name="inbox" /></button>
         <button v-if="!['drafts', 'sent', 'scheduled'].includes(role)" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="role === 'snoozed' ? t('later.otherTime') : t('actions.snooze')" @click="mail.snoozeRequest = [summary]"><AppIcon name="clock" /></button>
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.move')" @click="picking = true"><AppIcon name="move" /></button>
+        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('tasks.fromMail')" @click="makeTask"><AppIcon name="task" /></button>
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.markUnread')" @click="mail.setFlag(summary, 'seen', false); emit('back')"><AppIcon name="unread" /></button>
         <button class="rounded-lg p-2 hover:bg-sunken" :class="summary.flagged ? 'text-flag' : 'text-muted hover:text-ink'" :title="t('actions.flag')" @click="mail.setFlag(summary, 'flagged', !summary.flagged)">
           <AppIcon name="flag" :class="summary.flagged ? 'fill-current' : ''" />

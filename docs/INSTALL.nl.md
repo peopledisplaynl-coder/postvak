@@ -18,7 +18,7 @@ Er zijn twee manieren:
 5. Stel de cronjob in (zie stap 6 hieronder, met `app/cron.php`) en log in met je mailbox.
 
 Bijwerken: upload de nieuwe `public/` en `app/` over de oude heen, behalve `install.php`, en houd `app/config/config.php`.
-Database-aanpassingen gebeuren vanzelf bij de volgende keer inloggen.
+Database-aanpassingen gebeuren vanzelf bij het eerste bezoek na de update.
 
 ## B. Zelf bouwen en uploaden
 
@@ -119,6 +119,13 @@ zie je daarna wanneer de taak voor het laatst draaide.
 
 Meldingen zet je per apparaat aan onder **Instellingen → Meldingen**. Op iPhone/iPad werkt dat
 alleen als Postvak op het beginscherm staat (Deel → Zet op beginscherm).
+
+## 7. Agenda en contacten op je telefoon
+
+Onder **Instellingen → Agenda en taken** staan het serveradres en je gebruikersnaam, en maak je per apparaat een
+app-wachtwoord aan. Daar staat ook hoe je het instelt op iPhone, Android (DAVx5), macOS en Thunderbird; contacten gaan via dezelfde server (CardDAV).
+Vindt een telefoon de server niet, controleer dan of `.htaccess` in de documentmap staat: die geeft het wachtwoord
+door aan PHP en stuurt `/.well-known/caldav` door naar `/dav/`.
 
 ## Problemen
 

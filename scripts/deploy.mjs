@@ -93,6 +93,18 @@ if (composerLock && composerLock !== depsState.composer) {
     }
   }
 }
+// A package added to composer.json in an update (the lock file may not have it yet): add and install it.
+const required = Object.keys(JSON.parse(readFileSync(join(backend, 'composer.json'), 'utf8')).require ?? {}).filter((n) => n.includes('/'))
+const missing = required.filter((n) => !existsSync(join(backend, 'vendor', ...n.split('/'))))
+if (missing.length && existsSync(join(backend, 'vendor', 'autoload.php'))) {
+  console.log(`› New backend packages (${missing.join(', ')}): composer update…`)
+  try {
+    execSync(`composer update ${missing.join(' ')} --with-all-dependencies --no-dev --no-interaction --optimize-autoloader`, { cwd: backend, stdio: 'inherit' })
+    depsState.composer = lockHash(join(backend, 'composer.lock'))
+  } catch {
+    fail(`composer update failed. Run "composer update ${missing.join(' ')} -W --no-dev" in the backend folder, then deploy again.`)
+  }
+}
 writeFileSync(depsFile, JSON.stringify(depsState, null, 2))
 
 if (!args.has('--skip-build')) {

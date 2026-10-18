@@ -115,9 +115,12 @@ function errorText(e) {
 async function save() {
   saving.value = true
   try {
+    // A contact from a phone may have no e-mail address; leave it out then.
+    const body = { ...form.value }
+    if (currentId.value !== 'new' && !body.email.trim()) delete body.email
     const contact = currentId.value === 'new'
-      ? await api.post('/contacts', form.value)
-      : await api.patch(`/contacts/${currentId.value}`, form.value)
+      ? await api.post('/contacts', body)
+      : await api.patch(`/contacts/${currentId.value}`, body)
     upsertLocal(contact)
     currentId.value = contact.id
     editing.value = false
@@ -231,7 +234,7 @@ const countLabel = computed(() => (visible.value.length === 1 ? t('contacts.coun
           class="w-full rounded-lg bg-sunken px-3 py-2 outline-none placeholder:text-muted"
           :placeholder="t('contacts.search')"
         />
-        <div class="flex gap-1.5 overflow-x-auto" role="tablist">
+        <div class="flex gap-1.5 no-scrollbar overflow-x-auto" role="tablist">
           <button
             v-for="f in ['saved', 'favorites', 'all']"
             :key="f"
@@ -266,7 +269,7 @@ const countLabel = computed(() => (visible.value.length === 1 ? t('contacts.coun
                   :class="c.id === currentId ? 'bg-accent-soft' : 'hover:bg-sunken/60'"
                   @click="select(c)"
                 >
-                  <span class="flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white" :style="{ background: avatarColor(c.email) }">
+                  <span class="flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white" :style="{ background: avatarColor(c.email || c.name) }">
                     {{ initials(c) }}
                   </span>
                   <span class="min-w-0 flex-1">
@@ -318,7 +321,7 @@ const countLabel = computed(() => (visible.value.length === 1 ? t('contacts.coun
         </label>
         <label class="block">
           <span class="mb-1 block text-sm text-muted">{{ t('contacts.email') }}</span>
-          <input v-model="form.email" type="email" required maxlength="255" class="w-full rounded-lg border border-line bg-surface px-3 py-2 outline-none focus:border-accent" />
+          <input v-model="form.email" type="email" :required="currentId === 'new' || !!current?.email" maxlength="255" class="w-full rounded-lg border border-line bg-surface px-3 py-2 outline-none focus:border-accent" />
         </label>
         <label class="block">
           <span class="mb-1 block text-sm text-muted">{{ t('contacts.phone') }}</span>
@@ -334,14 +337,14 @@ const countLabel = computed(() => (visible.value.length === 1 ? t('contacts.coun
         </label>
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" class="rounded-lg px-4 py-2 text-muted hover:bg-sunken" @click="cancelEdit">{{ t('contacts.cancel') }}</button>
-          <button class="rounded-lg bg-accent px-4 py-2 font-medium text-white disabled:opacity-60" :disabled="saving || !form.email.trim()">{{ t('contacts.save') }}</button>
+          <button class="rounded-lg bg-accent px-4 py-2 font-medium text-white disabled:opacity-60" :disabled="saving || (currentId === 'new' && !form.email.trim())">{{ t('contacts.save') }}</button>
         </div>
       </form>
 
       <!-- View -->
       <div v-else-if="current" class="mx-auto w-full max-w-lg px-5 py-4">
         <div class="flex flex-col items-center gap-3 text-center">
-          <span class="flex size-20 items-center justify-center rounded-full text-2xl font-semibold text-white" :style="{ background: avatarColor(current.email) }">
+          <span class="flex size-20 items-center justify-center rounded-full text-2xl font-semibold text-white" :style="{ background: avatarColor(current.email || current.name) }">
             {{ initials(current) }}
           </span>
           <div class="min-w-0">
@@ -349,7 +352,7 @@ const countLabel = computed(() => (visible.value.length === 1 ? t('contacts.coun
             <p v-if="current.name" class="text-muted break-all">{{ current.email }}</p>
           </div>
           <div class="flex flex-wrap justify-center gap-2">
-            <button class="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-white" @click="mailTo(current)">
+            <button v-if="current.email" class="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-white" @click="mailTo(current)">
               <AppIcon name="send" :size="17" /> {{ t('contacts.mail') }}
             </button>
             <a v-if="current.phone" :href="`tel:${current.phone.replace(/[^0-9+]/g, '')}`" class="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ring-1 ring-line hover:bg-sunken">
@@ -362,9 +365,13 @@ const countLabel = computed(() => (visible.value.length === 1 ? t('contacts.coun
         </div>
 
         <dl class="mt-6 divide-y divide-line rounded-2xl ring-1 ring-line">
-          <div class="px-4 py-3">
+          <div v-if="current.email" class="px-4 py-3">
             <dt class="text-sm text-muted">{{ t('contacts.email') }}</dt>
             <dd class="break-all">{{ current.email }}</dd>
+          </div>
+          <div v-if="current.other_emails?.length" class="px-4 py-3">
+            <dt class="text-sm text-muted">{{ t('contacts.otherEmails') }}</dt>
+            <dd v-for="e in current.other_emails" :key="e" class="break-all">{{ e }}</dd>
           </div>
           <div v-if="current.phone" class="px-4 py-3">
             <dt class="text-sm text-muted">{{ t('contacts.phone') }}</dt>
@@ -380,7 +387,13 @@ const countLabel = computed(() => (visible.value.length === 1 ? t('contacts.coun
         </p>
       </div>
 
-      <p v-else class="m-auto text-muted">{{ t('contacts.select') }}</p>
+      <div v-else class="m-auto max-w-xs px-5 text-center text-muted">
+        <p>{{ t('contacts.select') }}</p>
+        <p class="mt-4 text-sm">
+          <AppIcon name="phone" :size="15" class="mr-1 inline align-[-2px]" />{{ t('contacts.syncHint') }}
+          <RouterLink to="/settings/calendar" class="text-accent">{{ t('contacts.syncLink') }}</RouterLink>
+        </p>
+      </div>
     </section>
   </div>
 </template>

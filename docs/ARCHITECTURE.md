@@ -50,6 +50,11 @@ users, linked accounts, preferences and contacts.
 - Passwords are stored with `sodium_crypto_secretbox` using `app_key` from `config.php`.
 - Session cookie: `HttpOnly`, `Secure`, `SameSite=Strict`. A CSRF token is returned at login
   and sent back as `X-CSRF-Token`.
+- Sessions live in `storage/sessions` (shared hosts clean their common session folder after minutes).
+  "Stay logged in" (default on): persistent cookie for `session.lifetime`, renewed daily while in use.
+  Off: browser-session cookie and an 8-hour idle limit. `cron.php` removes expired session files.
+- Own IMAP/SMTP servers at a first login only when `login_custom_servers` is on (config or admin page):
+  otherwise anyone could pick a server that accepts any password for an unused address of an allowed domain.
 - Failed logins are rate limited per IP and per address (`login_attempts`, hashed values only).
 
 ## Mail rendering
@@ -89,6 +94,8 @@ users, linked accounts, preferences and contacts.
 - `backend/cron.php` (CLI) runs `Cron\CronRunner` every few minutes (host's cron / Plesk scheduled
   task). A lock file in `storage/` prevents overlapping runs; the last run is stored in `app_settings`
   (`cron_last_run`) and shown on the admin and settings pages.
+  Log lines go to `storage/logs/cron.log` (rotated at 1 MB), not to the output, because Plesk e-mails
+  whatever a cron job writes to stderr; only an uncaught failure is printed.
 - `Cron\NewMailNotifier`: for users with push subscriptions, one `SELECT INBOX` per account
   (`notify = 1`) gives UIDNEXT. New UIDs above `accounts.notify_last_uid` that are unread are sent as
   one push (up to 3 messages, otherwise a summary). The first check only stores the starting point;
@@ -111,6 +118,47 @@ users, linked accounts, preferences and contacts.
   no Postvak window is focused, and tells open windows to refresh the list. A click focuses Postvak
   and opens the message.
 
+## Calendar and tasks (CalDAV)
+
+- `sabre/dav` serves CalDAV at `<app_url>/dav/` (`public/api/dav.php`, rewritten by `.htaccess`; `/.well-known/caldav`
+  redirects there). Phones, Thunderbird and macOS sync calendars (VEVENT) and task lists (VTODO) both ways.
+- Storage is sabre's own MySQL schema with a `dav_` prefix (migration 009). The web interface uses the same data
+  through `Calendar\CalendarService`, which reads and writes iCalendar via `sabre/vobject`, so anything made in
+  Postvak looks native on a phone and the other way round. Recurring events are expanded per requested period;
+  the editor changes the whole series, deleting can drop one occurrence (EXDATE).
+- Principals are `principals/<login email>`. CalDAV logins use **app passwords** (`app_passwords`, HMAC with
+  `app_key`, shown once): the mailbox password is never given to a calendar app, 2FA keeps working, and a lost
+  device is revoked on its own. Failed CalDAV logins count towards the normal login rate limit.
+- Every user gets a calendar "Agenda" and a task list "Taken" (English names for English users) on first use.
+- Reminders (VALARM) become push notifications: `Cron\AlarmNotifier` runs from `cron.php`, looks a few minutes
+  ahead and remembers what it sent (`calendar_alarms_sent`). This also works for items made on a phone.
+- **Calendars from elsewhere** (`Calendar\FeedService`, table `calendar_feeds`): an iCal address (Google's secret
+  address, Outlook, holidays) is fetched by cron every 30 minutes into a calendar instance with access 2 (read):
+  read-only for the web UI and for CalDAV clients. One calendar object per UID (`feed-<sha1>.ics`); only changed
+  objects are written, so phones sync differences. VALARMs are dropped. Downloads go through `Http\Fetcher`
+  (http/https only, public hosts only, redirects checked hop by hop, 10 MB limit, conditional GET with ETag).
+  The address is stored encrypted and shown masked.
+- **Share links** (`Calendar\ShareService`, table `calendar_shares`): `GET /api/ical/<token>.ics` serves one calendar
+  as a single iCalendar file without reminders, for Google "From URL" / Outlook. The token (24 random bytes) is the
+  only credential; stored encrypted (so the link can be shown again) and as SHA-256 for lookup.
+- **Invitations** (`Calendar\InvitationService`): a `text/calendar` / `.ics` part with METHOD REQUEST, CANCEL or PUBLISH
+  becomes `invitation` in the message response. Answering stores the event (with the user's PARTSTAT) in the calendar,
+  or removes it when declined/cancelled, and sends an iMIP REPLY to the organizer (PHPMailer `Ical`, 8-bit).
+- "Make a task" in the reader stores a link back to the message (`X-POSTVAK-MAIL`: account, folder, UID, subject,
+  sender), so the task can open the mail again as long as it was not moved.
+
+## Contacts over CardDAV
+
+- `Dav\AddressBookBackend` serves one address book "Postvak" per user (`addressbooks/<login>/contacts/`) straight from
+  the `contacts` table: saved contacts are cards, collected addresses are not. Sync tokens come from `contact_changes`
+  (one row per change, the token is the highest id); every write in `ContactRepository` logs a change.
+- A card a phone sends is kept whole in `contacts.vcard`, so photos, birthdays and addresses survive. Postvak takes
+  the name, first e-mail address (others go to `extra_emails`), first phone number and note from it; edits in Postvak
+  change only those properties inside the stored card (`Contacts\ContactCards::apply`). A card without an e-mail
+  address is allowed (`email` is nullable). Cards made in Postvak are named `pv-<id>.vcf`, a phone's own cards keep
+  their name (`card_uri`).
+- Deleting a card on a phone keeps an address you send to as a collected one (for autocomplete).
+
 ## API
 
 All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` because they can contain
@@ -121,6 +169,7 @@ All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` b
 | POST | `/auth/login` | `{email, password, imap_host?, …}` → session, accounts, settings, csrf |
 | POST | `/auth/logout` | |
 | GET | `/auth/me` | Current session (used at startup) |
+| GET | `/auth/options` | What the login page shows (`custom_servers`); no session needed |
 | GET / PATCH | `/settings` | User preferences |
 | GET / POST | `/accounts` | List / add account (verified first) |
 | PATCH / DELETE | `/accounts/{id}` | Edit (name, colour, signature, folders, server, password) / remove |
@@ -168,6 +217,21 @@ All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` b
 | GET | `/admin/users` · PATCH / DELETE `/admin/users/{id}` | Admin: list, block/unblock (`{blocked}`), remove users |
 | GET | `/admin/security` · POST `/admin/security/release` | Admin: login attempts, current blocks, release (`{ip_key}` / `{email_key}`) |
 | GET / PATCH | `/admin/settings` | Admin: allowed login domains, default user preferences |
+| GET / POST | `/calendars` | Calendars and task lists of the user (with `feed` and `share_url`) / create `{name, color, type: events\|tasks}` |
+| PATCH / DELETE | `/calendars/{id}` | Rename or recolour `{name?, color?}` / delete with all items (not the last one) |
+| GET | `/events?start=&end=&tz=&calendars=` | Occurrences in the period (recurring events expanded), times in `tz` |
+| GET / PUT / DELETE | `/events/{id}` | One event (series) with editor fields / save / delete (`?occurrence=<timestamp>`: only that one) |
+| POST | `/events` | `{calendar_id, title, start, end, all_day, location?, notes?, reminder?, repeat?, until?}` |
+| GET / POST | `/tasks?completed=0` | Tasks of all lists / create `{list_id, title, due?, due_time?, remind?, priority?, notes?, mail?}` |
+| PATCH / DELETE | `/tasks/{id}` | Change only the fields sent (e.g. `{completed: true}`) / delete |
+| GET | `/dav` | CalDAV server address, user name and the user's app passwords |
+| POST / DELETE | `/dav/passwords`, `/dav/passwords/{id}` | Create an app password `{name}` (returned once) / revoke |
+| POST | `/calendar-feeds` | Add a calendar from elsewhere `{url, name?, color?}`: downloads it at once (400 with the reason when it does not work) |
+| POST | `/calendar-feeds/{id}/refresh` | Fetch now |
+| DELETE | `/calendar-feeds/{id}` | Stop and remove (also `DELETE /calendars/{id}` of its calendar) |
+| POST / DELETE | `/calendars/{id}/share` | Make (or replace) / revoke the secret .ics link of a calendar; `GET /calendars` returns it as `share_url` |
+| GET | `/ical/{token}.ics` | Public: the shared calendar as iCalendar |
+| POST | `/accounts/{id}/messages/{uid}/invitation` | `{folder, response: accepted\|tentative\|declined\|remove, reply?, calendar_id?}`; the message itself returns `invitation` (method, title, times, organizer, `in_calendar`, `calendar_status`) |
 | GET | `/health` | Version check |
 
 ## Admin
@@ -180,7 +244,7 @@ through the app. Blocked users are logged out on their next request.
 
 See `backend/database/schema.sql`. Schema changes go into `backend/database/migrations/NNN_name.sql`
 and are recorded in `schema_migrations`. There is no command line on shared hosting, so pending
-migrations run automatically at login and can be started from the admin page (`Migrator`).
+migrations run automatically on the first request after a new version (`Migrator::ensureCurrent`, a marker file `storage/.schema-<version>`), at login and from cron, and can be started from the admin page. A failure is shown on the admin page.
 
 ## Tests and releases
 
@@ -193,7 +257,7 @@ migrations run automatically at login and can be started from the admin page (`M
 - `scripts/release.mjs` builds `dist/postvak-<version>.zip` with `public/` (web root, including `backend/installer/install.php`)
   and `app/` (code, `vendor` without dev packages, database scripts). `public/api/app-path.php` points to `../../app`.
   `.github/workflows/release.yml` runs it for every `v*` tag and attaches the zip to a GitHub release; the version in
-  `frontend/package.json`, `POSTVAK_VERSION` in `public/api/index.php` and the tag must match.
+  `frontend/package.json`, `POSTVAK_VERSION` in `bootstrap.php` and the tag must match.
 - The installer only works while `app/config/config.php` does not exist. It imports `schema.sql` (which registers all
   migrations as applied) and writes the config with a new `app_key`; later versions update the schema through the
-  migrations at login.
+  migrations.

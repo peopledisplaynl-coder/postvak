@@ -52,10 +52,20 @@
 - [x] Release workflow on GitHub (tag `v*` → zip on the releases page)
 - [x] Screenshots generated from the demo mode (`scripts/screenshots.mjs`), changelog
 
+## 1.1: calendar and tasks
+
+- [x] Calendar (month, week, day, list), repeating events, reminders via push
+- [x] Task lists with due dates, priorities, reminders; mail → task
+- [x] CalDAV server (sabre/dav) with app passwords: sync with iPhone, Android (DAVx5), macOS, Thunderbird
+
+## Next
+
+- [x] 1.2: contacts sync with phones (CardDAV), calendar invitations (.ics) in the reader with accept/decline,
+      calendars from elsewhere (iCal address) and share links
+- [ ] 1.3: filters and out-of-office (Sieve, where the server supports it), reply templates
+
 ## Ideas after 1.0
 
 - [ ] Offline reading of recently opened messages (IndexedDB)
 - [ ] Hardening: per-user data key wrapped with a key derived from the login password
 - [ ] More interface languages (German, French; one file each)
-- [ ] Filters / rules (Sieve, where the mail server supports ManageSieve)
-- [ ] Calendar invitations (.ics) shown in the reader

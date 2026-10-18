@@ -66,6 +66,18 @@ body {
   }
 }
 
+/* Slim, quiet scrollbars (Windows otherwise shows thick grey bars with arrows). */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-muted) 45%, transparent) transparent;
+}
+
+/* Rows of tabs or chips that scroll sideways on small screens: swipe, no visible bar. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
 /* Safe areas for installed PWA on phones with a notch. */
 .pt-safe { padding-top: env(safe-area-inset-top); }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }

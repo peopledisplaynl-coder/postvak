@@ -9,6 +9,11 @@ Read `docs/ARCHITECTURE.md` and `docs/ROADMAP.md` before larger changes.
   processes, no IMAP IDLE. Deploy with `npm run deploy`.
 - Background work (push notifications, scheduled sending, snooze) runs only from `backend/cron.php`
   via the host's cron (`Cron\CronRunner`); never assume a daemon or queue worker.
+- Calendar and tasks live in sabre/dav's tables (`dav_*`); the web UI goes through `Calendar\CalendarService`
+  (iCalendar via sabre/vobject) so phones syncing over CalDAV (`/dav/`, app passwords) see the same data.
+  Contacts sync over CardDAV from the `contacts` table (`Dav\AddressBookBackend`); every contact write must log a
+  change via `Contacts\ContactCards` so phones pick it up.
+- Anything fetched from a user-given URL goes through `Http\Fetcher` (no private hosts).
 - `ext-imap` is not available; IMAP goes through webklex/php-imap in native mode, only via
   `backend/src/Mail/ImapService.php`.
 - The decoder options in `ImapService::makeClient()` must stay on `mimeheader`
@@ -23,7 +28,7 @@ Read `docs/ARCHITECTURE.md` and `docs/ROADMAP.md` before larger changes.
 - `npm run dev:api` + `npm run dev`: full stack locally (needs backend/config/config.php).
 - `npm run build`: builds into `backend/public`.
 - Tests: `php backend/tests/run.php`, `npm --prefix frontend test`, `npm --prefix frontend run test:e2e` (demo mode).
-- Release: bump `frontend/package.json` + `POSTVAK_VERSION`, add a CHANGELOG entry, tag `vX.Y.Z` (CI builds the zip via `scripts/release.mjs`).
+- Release: bump `frontend/package.json` + `POSTVAK_VERSION` (backend/bootstrap.php), add a CHANGELOG entry, tag `vX.Y.Z` (CI builds the zip via `scripts/release.mjs`).
 - Screenshots: start the demo on :5174, then `node scripts/screenshots.mjs`.
 - PHP lint: `find backend -name '*.php' -not -path '*/vendor/*' -exec php -l {} \;`
 

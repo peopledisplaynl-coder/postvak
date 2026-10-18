@@ -1,5 +1,6 @@
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
+import { api } from '../api/client.js'
 import { useRouter } from 'vue-router'
 import { useSession } from '../stores/session.js'
 import { t } from '../i18n/index.js'
@@ -10,6 +11,13 @@ const router = useRouter()
 const email = ref('')
 const password = ref('')
 const advanced = ref(false)
+const customServers = ref(false) // only when the admin allows own server settings
+const stay = ref(true)
+onMounted(async () => {
+  try {
+    customServers.value = !!(await api.get('/auth/options')).custom_servers
+  } catch {}
+})
 const server = ref({ imap_host: '', imap_port: '', smtp_host: '', smtp_port: '' })
 const busy = ref(false)
 const error = ref('')
@@ -25,7 +33,7 @@ async function submit() {
   error.value = ''
   busy.value = true
   try {
-    const result = await session.login({ email: email.value, password: password.value, ...(advanced.value ? server.value : {}) })
+    const result = await session.login({ email: email.value, password: password.value, remember: stay.value, ...(advanced.value && customServers.value ? server.value : {}) })
     if (result.twoFactor) {
       step.value = 'code'
       password.value = ''
@@ -132,10 +140,15 @@ function onCodeInput() {
         class="mt-1.5 w-full rounded-xl border border-line bg-surface px-4 py-3 outline-none focus:border-accent"
       />
 
-      <button type="button" class="mt-3 text-sm text-muted hover:text-ink" @click="advanced = !advanced">
+      <label class="mt-4 flex items-center gap-2 text-sm">
+        <input v-model="stay" type="checkbox" class="size-4 accent-accent" />
+        {{ t('login.stay') }}
+      </label>
+
+      <button v-if="customServers" type="button" class="mt-3 text-sm text-muted hover:text-ink" @click="advanced = !advanced">
         {{ t('login.advanced') }}
       </button>
-      <div v-if="advanced" class="mt-3 grid grid-cols-[1fr_6rem] gap-2 text-sm">
+      <div v-if="advanced && customServers" class="mt-3 grid grid-cols-[1fr_6rem] gap-2 text-sm">
         <p class="col-span-2 text-muted">{{ t('login.advancedHint') }}</p>
         <input v-model="server.imap_host" placeholder="IMAP-server" class="rounded-lg border border-line bg-surface px-3 py-2" />
         <input v-model="server.imap_port" placeholder="993" inputmode="numeric" class="rounded-lg border border-line bg-surface px-3 py-2" />

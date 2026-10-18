@@ -45,6 +45,8 @@ async function load() {
 watch(tab, load, { immediate: true })
 
 // ---- overview
+const missingLibraries = computed(() => Object.entries(overview.value?.libraries ?? {}).filter(([, ok]) => !ok).map(([name]) => name))
+
 async function migrate() {
   busy.value = true
   try {
@@ -117,7 +119,7 @@ async function saveSettings() {
   busy.value = true
   try {
     const domains = domainsText.value.split(/[\s,;]+/).map((d) => d.trim()).filter(Boolean)
-    settings.value = await api.patch('/admin/settings', { allowed_login_domains: domains, user_defaults: defaults.value })
+    settings.value = await api.patch('/admin/settings', { allowed_login_domains: domains, login_custom_servers: settings.value.login_custom_servers, user_defaults: defaults.value })
     domainsText.value = settings.value.allowed_from_config ? '' : settings.value.allowed_login_domains.join('\n')
     toasts.show(t('admin.saved'))
   } catch (e) {
@@ -143,7 +145,7 @@ const cronOk = computed(() => !!overview.value?.cron && Date.parse(overview.valu
       </button>
     </header>
 
-    <nav class="flex gap-1 overflow-x-auto px-4" role="tablist">
+    <nav class="flex gap-1 no-scrollbar overflow-x-auto px-4" role="tablist">
       <router-link
         v-for="name in tabs"
         :key="name"
@@ -167,6 +169,12 @@ const cronOk = computed(() => !!overview.value?.cron && Date.parse(overview.valu
             <span class="flex flex-1 items-center gap-2"><span class="size-2.5 rounded-full bg-flag" />{{ t('admin.migrationsPending', { list: overview.database.migrations.pending.join(', ') }) }}</span>
             <button class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60" :disabled="busy" @click="migrate">{{ t('admin.runMigrations') }}</button>
           </div>
+          <p v-if="overview.database.migrations.error" class="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
+            {{ t('admin.migrationError', { error: overview.database.migrations.error }) }}
+          </p>
+          <p v-if="missingLibraries.length" class="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
+            {{ t('admin.librariesMissing', { list: missingLibraries.join(', ') }) }}
+          </p>
         </div>
 
         <section>
@@ -227,9 +235,15 @@ const cronOk = computed(() => !!overview.value?.cron && Date.parse(overview.valu
                 <span v-for="(ok, ext) in overview.extensions" :key="ext" class="rounded-full px-2 py-0.5 text-xs" :class="ok ? 'bg-archive/15 text-archive' : 'bg-danger/15 text-danger'">{{ ext }}</span>
               </dd>
             </div>
+            <div v-if="overview.libraries" class="flex justify-between gap-4 px-4 py-2.5">
+              <dt class="shrink-0 text-muted">{{ t('admin.libraries') }}</dt>
+              <dd class="flex flex-wrap justify-end gap-1.5">
+                <span v-for="(ok, lib) in overview.libraries" :key="lib" class="rounded-full px-2 py-0.5 text-xs" :class="ok ? 'bg-archive/15 text-archive' : 'bg-danger/15 text-danger'">{{ lib }}</span>
+              </dd>
+            </div>
             <div class="flex justify-between gap-4 px-4 py-2.5">
               <dt class="shrink-0 text-muted">{{ t('admin.limits') }}</dt>
-              <dd class="text-right text-sm">upload {{ overview.limits.upload_max_filesize }}, post {{ overview.limits.post_max_size }}, geheugen {{ overview.limits.memory_limit }}, tijd {{ overview.limits.max_execution_time }}s</dd>
+              <dd class="text-right text-sm">{{ t('admin.limitsText', { upload: overview.limits.upload_max_filesize, post: overview.limits.post_max_size, memory: overview.limits.memory_limit, time: overview.limits.max_execution_time }) }}</dd>
             </div>
           </dl>
         </section>
@@ -307,6 +321,13 @@ const cronOk = computed(() => !!overview.value?.cron && Date.parse(overview.valu
           />
           <p v-if="settings.allowed_from_config && settings.allowed_login_domains.length" class="mt-1 text-sm text-muted">{{ t('admin.domainsFromConfig') }}</p>
           <p v-else-if="!settings.allowed_login_domains.length" class="mt-1 text-sm text-flag">{{ t('admin.domainsEveryone') }}</p>
+          <label class="mt-3 flex items-start gap-3 rounded-2xl bg-surface px-4 py-3 ring-1 ring-line">
+            <input v-model="settings.login_custom_servers" type="checkbox" class="mt-1 size-4 shrink-0 accent-accent" />
+            <span>
+              <span class="block">{{ t('admin.customServers') }}</span>
+              <span class="block text-sm text-muted">{{ t('admin.customServersHint') }}</span>
+            </span>
+          </label>
         </section>
 
         <section>

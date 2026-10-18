@@ -6,6 +6,7 @@
  *   { type: 'test' }
  *   { type: 'mail', account_id, account (label or null), total, messages: [{ uid, from, subject, snippet }] }
  *   { type: 'notice', kind: 'send_failed', subject, error, url }   (a scheduled message could not be sent)
+ *   { type: 'reminder', kind: 'event'|'task', title, location, all_day, start (UTC instant or date), url }
  * The texts below are the only UI strings outside src/i18n (a service worker cannot import them);
  * the server adds the device's language as data.lang.
  */
@@ -17,6 +18,10 @@ const TEXTS = {
     many: (n) => `${n} nieuwe berichten`,
     sendFailed: 'Versturen mislukt',
     sendFailedBody: (subject) => `"${subject || '(geen onderwerp)'}" kon niet worden verstuurd en staat weer bij Concepten.`,
+    reminder: 'Herinnering',
+    task: 'Taak',
+    allDay: 'Hele dag',
+    due: 'Deadline',
   },
   en: {
     test: 'Notifications work! You will get a message here when new mail arrives.',
@@ -25,6 +30,10 @@ const TEXTS = {
     many: (n) => `${n} new messages`,
     sendFailed: 'Sending failed',
     sendFailedBody: (subject) => `"${subject || '(no subject)'}" could not be sent and is back in Drafts.`,
+    reminder: 'Reminder',
+    task: 'Task',
+    allDay: 'All day',
+    due: 'Due',
   },
 }
 const ICON = 'icon-192.png'
@@ -59,6 +68,7 @@ async function handlePush(data) {
       data: { url: data.url || '' },
     })
   }
+  if (data.type === 'reminder') return showReminder(data, TEXT)
   if (data.type !== 'mail' || !Array.isArray(data.messages)) return
   // Postvak is open in front of the user: the list updates itself, no popup needed.
   if (windows.some((w) => w.focused && w.visibilityState === 'visible')) return
@@ -87,6 +97,36 @@ async function handlePush(data) {
       data: { url: `${base}?uid=${m.uid}&acc=${data.account_id}` },
     })
   }
+}
+
+// Reminders are shown even when Postvak is open: that is the point of them.
+function showReminder(data, TEXT) {
+  const locale = data.lang === 'en' ? 'en-GB' : 'nl-NL'
+  let when = ''
+  let date = ''
+  if (data.start && data.all_day) {
+    const d = new Date(data.start + 'T12:00:00')
+    date = data.start
+    when = `${d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })} · ${TEXT.allDay}`
+  } else if (data.start) {
+    const d = new Date(data.start)
+    date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const sameDay = d.toDateString() === new Date().toDateString()
+    when = sameDay
+      ? d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleString(locale, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  }
+  const lines = data.kind === 'task'
+    ? [when ? `${TEXT.due}: ${when}` : TEXT.task]
+    : [when, data.location].filter(Boolean)
+  return self.registration.showNotification(data.title || TEXT.reminder, {
+    body: lines.join('\n'),
+    icon: ICON,
+    badge: BADGE,
+    tag: `reminder-${data.kind}-${data.title}-${data.start}`,
+    requireInteraction: data.kind === 'event',
+    data: { url: data.kind === 'task' ? 'tasks' : `calendar${date ? `?date=${date}` : ''}` },
+  })
 }
 
 self.addEventListener('notificationclick', (event) => {

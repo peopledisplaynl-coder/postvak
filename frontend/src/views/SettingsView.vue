@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
 import AccountForm from '../components/AccountForm.vue'
+import CalendarSettings from '../components/CalendarSettings.vue'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
 import { api } from '../api/client.js'
@@ -17,7 +18,7 @@ const session = useSession()
 const toasts = useToasts()
 const mail = useMail()
 
-const tabs = ['general', 'swipe', 'notifications', 'privacy', 'security', 'folders', 'accounts']
+const tabs = ['general', 'swipe', 'notifications', 'calendar', 'privacy', 'security', 'folders', 'accounts']
 const tab = computed(() => (tabs.includes(route.params.tab) ? route.params.tab : 'general'))
 const editing = ref(null) // account id, 'new' or null
 
@@ -305,7 +306,7 @@ const pollOptions = [30, 60, 120, 300, 600]
       <h1 class="text-xl font-semibold">{{ t('settings.title') }}</h1>
     </header>
 
-    <nav class="flex gap-1 overflow-x-auto px-4" role="tablist">
+    <nav class="flex gap-1 no-scrollbar overflow-x-auto px-4" role="tablist">
       <router-link
         v-for="name in tabs"
         :key="name"
@@ -614,6 +615,9 @@ const pollOptions = [30, 60, 120, 300, 600]
           <button v-if="sec.devices.length" class="mt-3 text-sm font-medium text-danger" @click="forgetDevices">{{ t('security.forget') }}</button>
         </section>
       </div>
+
+      <!-- Calendar and tasks: calendars, linking phones (CalDAV) -->
+      <CalendarSettings v-else-if="tab === 'calendar'" />
 
       <!-- Folders -->
       <div v-else-if="tab === 'folders'" class="space-y-4">

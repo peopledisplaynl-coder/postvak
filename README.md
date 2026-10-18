@@ -10,6 +10,9 @@ on your phone (PWA). No Node.js, no daemons, no SSH needed on the server.
   <img src="docs/screenshots/desktop-light.png" width="720" alt="Desktop layout: folders, message list and reader">
 </p>
 <p align="center">
+  <img src="docs/screenshots/calendar-week.png" width="720" alt="Calendar, week view">
+</p>
+<p align="center">
   <img src="docs/screenshots/mobile-list.png" width="200" alt="Message list on a phone">
   <img src="docs/screenshots/mobile-message.png" width="200" alt="Reading a message on a phone">
   <img src="docs/screenshots/mobile-settings-dark.png" width="200" alt="Settings in dark mode">
@@ -31,9 +34,18 @@ on your phone (PWA). No Node.js, no daemons, no SSH needed on the server.
 - Drafts saved automatically, send later, undo send, address autocomplete from a contacts list.
 - Send from any of your accounts, each with its own signature.
 
+**Calendar and tasks**
+- Month, week, day and list view; repeating events, reminders as push notifications.
+- Task lists with due dates, priorities and reminders; turn a mail into a task with one click.
+- Syncs both ways with the calendar and reminders apps on iPhone, Android (DAVx5), macOS and Thunderbird (CalDAV),
+  using an app password per device.
+- Meeting invitations show as a card in the message: accept, maybe or decline, and the answer goes to the organizer.
+- Calendars from elsewhere (Google's secret iCal address, Outlook, holidays) shown read-only; a secret share link
+  shows a Postvak calendar in Google Calendar or Outlook.
+
 **Everything else**
 - Push notifications for new mail on phone and desktop (Web Push, no third-party service).
-- Contacts page with vCard import and export.
+- Contacts page with vCard import and export, synced with the contacts app on your phone (CardDAV).
 - Optional two-step verification (TOTP) with recovery codes and remembered devices.
 - Privacy by default: remote images blocked until you allow them (per message, sender or domain), mail HTML
   sanitised on the server and again in the browser, shown in a sandboxed frame.
@@ -61,7 +73,7 @@ and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - MySQL 5.7+ or MariaDB 10.3+
 - Apache or LiteSpeed with `mod_rewrite` (for `.htaccess`), HTTPS
 - An IMAP + SMTP mail server (the one from your hosting is fine)
-- Optional: a cron job every 5 minutes, for notifications, send later and snooze
+- Optional: a cron job every 5 minutes, for notifications, reminders, send later and snooze
 
 ## Installing
 
@@ -75,7 +87,7 @@ and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Step-by-step guides: [INSTALL.md](docs/INSTALL.md) (English) · [INSTALL.nl.md](docs/INSTALL.nl.md) (Nederlands).
 Updating: upload the new `public/` and `app/` over the old ones (keep `app/config/config.php`); database
-changes are applied automatically at the next login.
+changes are applied automatically on the first request after the update.
 
 ## Development
 
@@ -107,7 +119,7 @@ Building the release zip: `node scripts/release.mjs` (the GitHub workflow does t
 ```
 backend/              PHP API (PSR-4, namespace Postvak\)
   public/             web root: .htaccess, api/index.php (+ the built frontend)
-  src/                Controllers, Mail (IMAP/SMTP/sanitising), Push, Cron, Security, Repositories
+  src/                Controllers, Mail (IMAP/SMTP/sanitising), Calendar, Dav (CalDAV), Push, Cron, Security, Repositories
   database/           schema.sql and migrations
   installer/          install.php for the release zip
   tests/              unit tests

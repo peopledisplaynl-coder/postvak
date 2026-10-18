@@ -40,11 +40,18 @@ final class AdminController
         foreach (['mbstring', 'openssl', 'sodium', 'pdo_mysql', 'iconv', 'fileinfo', 'zip', 'libxml', 'curl'] as $ext) {
             $extensions[$ext] = extension_loaded($ext);
         }
+        // Libraries that must have been uploaded with vendor/ (a deploy with --skip-vendor can miss new ones).
+        $libraries = [
+            'webklex/php-imap'    => class_exists(\Webklex\PHPIMAP\ClientManager::class),
+            'phpmailer/phpmailer' => class_exists(\PHPMailer\PHPMailer\PHPMailer::class),
+            'sabre/dav'           => class_exists(\Sabre\CalDAV\Plugin::class),
+        ];
 
         Response::json([
-            'version'     => defined('POSTVAK_VERSION') ? POSTVAK_VERSION : null,
+            'version'     => POSTVAK_VERSION,
             'php'         => PHP_VERSION,
             'extensions'  => $extensions,
+            'libraries'   => $libraries,
             'limits'      => [
                 'upload_max_filesize' => ini_get('upload_max_filesize'),
                 'post_max_size'       => ini_get('post_max_size'),
@@ -56,6 +63,7 @@ final class AdminController
                 'migrations' => [
                     'applied' => array_column(Database::all('SELECT version, applied_at FROM schema_migrations ORDER BY version'), 'applied_at', 'version'),
                     'pending' => Migrator::pending(),
+                    'error'   => Migrator::lastError(),
                 ],
             ],
             'mail_server' => $this->checkMailServer(),
@@ -75,7 +83,13 @@ final class AdminController
     public function migrate(Request $r): void
     {
         Auth::requireAdmin();
-        Response::json(['applied' => Migrator::run(), 'pending' => Migrator::pending()]);
+        try {
+            $applied = Migrator::run();
+        } catch (\RuntimeException $e) {
+            // Admins see the real database error, so they can fix it or report it.
+            Response::json(['error' => $e->getMessage()], 500);
+        }
+        Response::json(['applied' => $applied, 'pending' => Migrator::pending()]);
     }
 
     /** Can the server reach the default IMAP and SMTP servers? (TCP connect only, no login.) */
@@ -162,7 +176,7 @@ final class AdminController
         Response::json(['id' => $id, 'two_factor' => false]);
     }
 
-    /** DELETE /admin/users/{id} — removes the user, their accounts and settings from Postvak (not their mail). */
+    /** DELETE /admin/users/{id} — removes the user, their accounts, settings, calendars and tasks from Postvak (not their mail). */
     public function deleteUser(Request $r): void
     {
         $me = Auth::requireAdmin();
@@ -170,6 +184,7 @@ final class AdminController
         if ($id === $me) {
             throw HttpException::badRequest('You cannot remove yourself');
         }
+        (new \Postvak\Calendar\CalendarService())->deleteAllFor($id);
         Database::run('DELETE FROM users WHERE id = ?', [$id]);
         Response::noContent();
     }
@@ -269,6 +284,10 @@ final class AdminController
             }
         }
 
+        if (array_key_exists('login_custom_servers', $body)) {
+            $this->app->set('login_custom_servers', (bool) $body['login_custom_servers']);
+        }
+
         if (isset($body['user_defaults']) && is_array($body['user_defaults'])) {
             $this->app->set('user_defaults', $this->settings->validateAll($body['user_defaults']));
         }
@@ -283,6 +302,7 @@ final class AdminController
             'allowed_from_config'   => !is_array($this->app->get('allowed_login_domains')),
             'user_defaults'         => SettingsRepository::defaults(),
             'admins'                => (array) Config::get('admins', []),
+            'login_custom_servers'  => AuthController::customServersAllowed(),
         ];
     }
 }

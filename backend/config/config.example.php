@@ -31,8 +31,15 @@ return [
 
     'session' => [
         'name'     => 'postvak_sid',
-        'lifetime' => 60 * 60 * 24 * 14, // 14 days ("remember me")
+        // With "Stay logged in": logged out after this long without using Postvak (renewed while you use it).
+        // Without it: the session ends when the browser closes, or after 8 hours idle.
+        'lifetime' => 60 * 60 * 24 * 30,
     ],
+
+    // Show "server settings" on the login page, so a first login can use another IMAP/SMTP server
+    // than default_servers. Off by default: whoever picks the server decides whether the password is
+    // right. Can also be switched on the admin page.
+    'login_custom_servers' => false,
 
     // Login protection: max failed attempts per IP / per address within the window.
     'rate_limit' => [

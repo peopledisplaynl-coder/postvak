@@ -21,7 +21,7 @@ const backend = join(root, 'backend')
 const args = new Set(process.argv.slice(2))
 const version = JSON.parse(readFileSync(join(root, 'frontend', 'package.json'), 'utf8')).version
 
-const apiVersion = /POSTVAK_VERSION = '([^']+)'/.exec(readFileSync(join(backend, 'public', 'api', 'index.php'), 'utf8'))?.[1]
+const apiVersion = /POSTVAK_VERSION = '([^']+)'/.exec(readFileSync(join(backend, 'bootstrap.php'), 'utf8'))?.[1]
 if (apiVersion !== version) {
   console.error(`Version mismatch: frontend/package.json is ${version}, POSTVAK_VERSION is ${apiVersion}.`)
   process.exit(1)

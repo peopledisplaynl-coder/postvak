@@ -1,3 +1,4 @@
+import { createCalendarMock } from './mockCalendar.js'
 // Fake backend for "npm run dev:mock". Lets you work on the UI without PHP or a mail server.
 // Data lives in memory and resets on reload.
 
@@ -58,7 +59,26 @@ const senders = D.senders
 const contactsDb = senders.map(([name, email], i) => ({
   id: i + 1, name, email, phone: i % 3 ? '' : '06 1234 56' + String(i).padStart(2, '0'), notes: '', favorite: i === 0,
   saved: i % 2 === 0, times_used: i + 1, last_used_at: new Date(Date.now() - i * 86400000).toISOString(),
+  other_emails: i === 0 ? [email.replace('@', '.work@')] : [], synced: i === 0,
 }))
+// A card that came from a phone without an e-mail address.
+contactsDb.push({ id: 99, name: nl ? 'Loodgieter Kees' : 'Plumber Joe', email: '', phone: '06 9876 5432', notes: '', favorite: false, saved: true, times_used: 0, last_used_at: null, other_emails: [], synced: true })
+
+// Meeting invitations in the demo (one per message with the "rehearsal times" subject).
+const invitations = {}
+function invitationFor(msg) {
+  if (msg.subject !== D.subjects[5]) return null
+  const start = new Date(); start.setDate(start.getDate() + 3); start.setHours(20, 0, 0, 0)
+  const end = new Date(start.getTime() + 90 * 60000)
+  invitations[msg.uid] ??= {
+    method: 'request', uid: `demo-${msg.uid}@example`, title: nl ? 'Repetitie nieuwe nummers' : 'Rehearsal new songs',
+    location: nl ? 'Studio 013' : 'Studio B', description: '', all_day: false,
+    start: start.toISOString().replace(/\.\d{3}Z$/, 'Z'), end: end.toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    recurring: false, organizer: { name: msg.from.name, email: msg.from.email }, attendees: 4, own: false,
+    my_status: 'needs-action', in_calendar: false, calendar_status: null, part: 0,
+  }
+  return invitations[msg.uid]
+}
 const subjects = D.subjects
 
 function makeMessages(accountId, folder, count) {
@@ -97,6 +117,8 @@ const extraFolders = []
 
 const trusted = [{ id: 1, kind: 'domain', value: 'bol.com' }]
 
+const calendarMock = createCalendarMock(nl)
+
 const wait = (ms = 250) => new Promise((r) => setTimeout(r, ms))
 const roleToPath = { archive: 'Archive', trash: 'Trash', junk: 'Junk', inbox: 'INBOX' }
 
@@ -105,16 +127,19 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
   const m = path.match(/^\/accounts\/(\d+)(\/.*)?$/)
   const id = m ? Number(m[1]) : null
   const sub = m?.[2] ?? ''
+  const cal = calendarMock(method, path, { body, query })
+  if (cal !== undefined) return cal
   const session = () => ({ user: { id: 1, login_email: accounts[0].email, is_admin: true }, accounts, settings, csrf: 'mock' })
 
   if (path === '/trusted-senders' && method === 'GET') return trusted
   if (path === '/trusted-senders' && method === 'POST') { const item = { id: trusted.length + 1, ...body }; trusted.push(item); return item }
   if (path.startsWith('/trusted-senders/') && method === 'DELETE') { trusted.splice(trusted.findIndex((x) => x.id === Number(path.split('/').pop())), 1); return null }
   if (path === '/admin/overview') return {
-    version: '0.2.0-mock', php: '8.3', debug: false,
+    version: 'mock', php: '8.3', debug: false,
     extensions: { mbstring: true, openssl: true, sodium: true, pdo_mysql: true, iconv: true, fileinfo: true, zip: true, libxml: true },
+    libraries: { 'webklex/php-imap': true, 'phpmailer/phpmailer': true, 'sabre/dav': true },
     limits: { upload_max_filesize: '64M', post_max_size: '64M', memory_limit: '256M', max_execution_time: '60' },
-    database: { server: 'MariaDB (mock)', migrations: { applied: { '001_initial': '' }, pending: [] } },
+    database: { server: 'MariaDB (mock)', migrations: { applied: { '001_initial': '' }, pending: [], error: null } },
     mail_server: { imap: { host: `mail.${D.domain}`, port: 993, ok: true, ms: 24 }, smtp: { host: `mail.${D.domain}`, port: 465, ok: true, ms: 31 } },
     stats: { users: 3, accounts: 4, logins_24h: 6, failed_24h: 2 },
   }
@@ -128,8 +153,9 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
     blocked_emails: [{ key: 'a'.repeat(64), email: 'oom@familie.nl', fails: 5 }], blocked_ips: [],
     recent: [{ at: '2026-10-17 16:58:00', email: 'oom@familie.nl', ip: '84.12.3.4', success: false }, { at: '2026-10-17 16:30:00', email: D.meEmail, ip: '84.12.3.9', success: true }],
   }
-  if (path === '/admin/settings') return { allowed_login_domains: [D.domain], allowed_from_config: true, user_defaults: settings, admins: [] }
+  if (path === '/admin/settings') return { allowed_login_domains: [D.domain], allowed_from_config: true, user_defaults: settings, admins: [], login_custom_servers: false }
 
+  if (path === '/auth/options') return { custom_servers: false }
   if (path === '/auth/login') { sessionStorage.setItem('pv-mock-login', '1'); return session() }
   if (path === '/auth/me') {
     if (!sessionStorage.getItem('pv-mock-login')) throw Object.assign(new Error('Not logged in'), { status: 401 })
@@ -214,7 +240,15 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
              <p>${images ? '<img src="https://picsum.photos/480/200" alt="" />' : '<img alt="" />'}</p>
              <p>${D.bye},<br>${msg.from.name}</p>`,
       attachments: msg.has_attachments ? [{ index: 0, name: D.attachment, mime: 'application/pdf', size: 184320, inline: false, url: '#' }] : [],
+      invitation: invitationFor(msg),
     }
+  }
+  const invite = sub.match(/^\/messages\/(\d+)\/invitation$/)
+  if (invite && method === 'POST') {
+    const inv = invitations[Number(invite[1])]
+    const inCal = ['accepted', 'tentative'].includes(body.response)
+    Object.assign(inv, { in_calendar: inCal, calendar_status: body.response === 'remove' ? null : body.response })
+    return { in_calendar: inCal, calendar_status: inv.calendar_status, replied: !!body.reply, reply_error: null }
   }
 
   if (sub === '/move') {

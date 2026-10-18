@@ -34,6 +34,9 @@ final class CronRunner
             $results['scheduled'] = self::task('scheduled', static fn () => (new \Postvak\Mail\Scheduler())->runDue($log), $log);
             $results['snoozes'] = self::task('snoozes', static fn () => (new \Postvak\Mail\Snoozer())->runDue($log), $log);
             $results['notifications'] = self::task('notifications', static fn () => (new NewMailNotifier())->run($log), $log);
+            $results['reminders'] = self::task('reminders', static fn () => (new AlarmNotifier())->run($log), $log);
+            $results['feeds'] = self::task('feeds', static fn () => (new \Postvak\Calendar\FeedService())->refreshDue($log), $log);
+            $results['sessions'] = self::task('sessions', static fn () => ['removed' => \Postvak\Auth::cleanSessions()], $log);
         } finally {
             $summary = ['at' => date(DATE_ATOM), 'took_ms' => (int) ((microtime(true) - $started) * 1000), 'results' => $results];
             try {

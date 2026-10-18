@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Postvak;
 
 use PDOException;
+use Postvak\Repositories\AppSettingsRepository;
 use Throwable;
 
 /**
@@ -55,7 +56,7 @@ final class Migrator
         return $done;
     }
 
-    /** Run pending migrations, but never let a failure block the request (logged instead). */
+    /** Run pending migrations, but never let a failure block the request (logged, and shown on the admin page). */
     public static function runQuietly(): void
     {
         try {
@@ -63,8 +64,55 @@ final class Migrator
                 $done = self::run();
                 error_log('[postvak] applied migrations: ' . implode(', ', $done));
             }
+            self::rememberError(null);
         } catch (Throwable $e) {
             error_log('[postvak] automatic migration failed: ' . $e->getMessage());
+            self::rememberError($e->getMessage());
+        }
+    }
+
+    /**
+     * Apply database updates once per version, right after a deploy, instead of waiting for the next login.
+     * Costs one file check per request once done.
+     */
+    public static function ensureCurrent(string $version): void
+    {
+        $marker = POSTVAK_ROOT . '/storage/.schema-' . preg_replace('/[^0-9A-Za-z.\-]/', '', $version);
+        if (is_file($marker)) {
+            return;
+        }
+        self::runQuietly();
+        try {
+            if (self::pending() === []) {
+                @touch($marker);
+            }
+        } catch (Throwable) {
+        }
+    }
+
+    /** The last automatic migration error, or null. */
+    public static function lastError(): ?string
+    {
+        try {
+            $error = (new AppSettingsRepository())->get('migration_error');
+            return is_string($error) ? $error : null;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private static function rememberError(?string $message): void
+    {
+        try {
+            $settings = new AppSettingsRepository();
+            if ($message === null) {
+                if ($settings->get('migration_error') !== null) {
+                    $settings->delete('migration_error');
+                }
+            } else {
+                $settings->set('migration_error', mb_substr($message, 0, 1000));
+            }
+        } catch (Throwable) {
         }
     }
 

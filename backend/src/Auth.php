@@ -14,34 +14,104 @@ use Postvak\Http\Request;
  */
 final class Auth
 {
+    /** Without "stay logged in": the session ends when the browser closes, or after this many idle seconds. */
+    private const SHORT_IDLE = 8 * 3600;
+
     public static function start(): void
     {
         if (session_status() === PHP_SESSION_ACTIVE) {
             return;
         }
-        $lifetime = (int) Config::get('session.lifetime', 1209600);
-        $https = ($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off'
-            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
-
+        $lifetime = self::lifetime();
         ini_set('session.use_strict_mode', '1');
         ini_set('session.gc_maxlifetime', (string) $lifetime);
+
+        // Own session folder: shared hosts often clean their common session folder after ~24 minutes,
+        // which would log everyone out regardless of "stay logged in".
+        $dir = POSTVAK_ROOT . '/storage/sessions';
+        if (is_dir($dir) || @mkdir($dir, 0700, true)) {
+            if (is_writable($dir)) {
+                session_save_path($dir);
+                ini_set('session.gc_probability', '1');
+                ini_set('session.gc_divisor', '200');
+            }
+        }
+
         session_name((string) Config::get('session.name', 'postvak_sid'));
-        session_set_cookie_params([
-            'lifetime' => $lifetime,
-            'path'     => '/',
-            'secure'   => $https,
-            'httponly' => true,
-            'samesite' => 'Strict',
-        ]);
+        session_set_cookie_params(self::cookieParams($lifetime));
         session_start();
+
+        if (isset($_SESSION['user_id'])) {
+            $now = time();
+            $remember = ($_SESSION['remember'] ?? true) !== false; // sessions from before 1.0.1 count as remembered
+            if (!$remember && ($_SESSION['last_seen'] ?? $now) < $now - self::SHORT_IDLE) {
+                $_SESSION = [];
+                session_regenerate_id(true);
+                return;
+            }
+            $_SESSION['last_seen'] = $now;
+            if (!$remember) {
+                // session_start() sent a persistent cookie for a new id; this one must not outlive the browser.
+                if (!isset($_SESSION['cookie_at'])) {
+                    self::sendCookie(0);
+                    $_SESSION['cookie_at'] = $now;
+                }
+            } elseif (($_SESSION['cookie_at'] ?? 0) < $now - 86400) {
+                // Rolling: active users stay logged in; the cookie is renewed once a day.
+                self::sendCookie($now + $lifetime);
+                $_SESSION['cookie_at'] = $now;
+            }
+        }
     }
 
-    public static function login(int $userId): string
+    public static function lifetime(): int
+    {
+        return max(3600, (int) Config::get('session.lifetime', 60 * 60 * 24 * 30));
+    }
+
+    private static function cookieParams(int $lifetime): array
+    {
+        $https = ($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off'
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+        return ['lifetime' => $lifetime, 'path' => '/', 'secure' => $https, 'httponly' => true, 'samesite' => 'Strict'];
+    }
+
+    private static function sendCookie(int $expires): void
+    {
+        if (headers_sent()) {
+            return;
+        }
+        $p = self::cookieParams(0);
+        setcookie(session_name(), session_id(), [
+            'expires' => $expires, 'path' => $p['path'], 'secure' => $p['secure'], 'httponly' => true, 'samesite' => 'Strict',
+        ]);
+    }
+
+    public static function login(int $userId, bool $remember = true): string
     {
         session_regenerate_id(true);
-        $_SESSION['user_id'] = $userId;
-        $_SESSION['csrf'] = bin2hex(random_bytes(32));
+        $_SESSION = [
+            'user_id'   => $userId,
+            'csrf'      => bin2hex(random_bytes(32)),
+            'remember'  => $remember,
+            'last_seen' => time(),
+            'cookie_at' => time(),
+        ];
+        self::sendCookie($remember ? time() + self::lifetime() : 0);
         return $_SESSION['csrf'];
+    }
+
+    /** Remove session files older than the lifetime (called from cron; PHP's own GC may be off). */
+    public static function cleanSessions(): int
+    {
+        $removed = 0;
+        $limit = time() - self::lifetime();
+        foreach (glob(POSTVAK_ROOT . '/storage/sessions/sess_*') ?: [] as $file) {
+            if (@filemtime($file) < $limit && @unlink($file)) {
+                $removed++;
+            }
+        }
+        return $removed;
     }
 
     public static function logout(): void

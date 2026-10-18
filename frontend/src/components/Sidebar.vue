@@ -66,7 +66,7 @@ function go(accountId, path = 'INBOX') {
     </div>
 
     <!-- Accounts -->
-    <div v-if="session.accounts.length > 1" class="flex gap-1.5 overflow-x-auto px-3 pb-2">
+    <div v-if="session.accounts.length > 1" class="flex flex-wrap gap-1.5 px-3 pb-2">
       <button
         v-for="a in session.accounts"
         :key="a.id"
@@ -120,6 +120,22 @@ function go(accountId, path = 'INBOX') {
       </li>
     </ul>
 
+    <router-link
+      to="/calendar"
+      class="mx-2 flex items-center gap-2 rounded-xl px-3 py-2 text-muted hover:bg-sunken hover:text-ink"
+      @click="emit('navigate', null)"
+    >
+      <AppIcon name="calendar" :size="19" />
+      {{ t('calendar.title') }}
+    </router-link>
+    <router-link
+      to="/tasks"
+      class="mx-2 flex items-center gap-2 rounded-xl px-3 py-2 text-muted hover:bg-sunken hover:text-ink"
+      @click="emit('navigate', null)"
+    >
+      <AppIcon name="task" :size="19" />
+      {{ t('tasks.title') }}
+    </router-link>
     <router-link
       to="/contacts"
       class="mx-2 flex items-center gap-2 rounded-xl px-3 py-2 text-muted hover:bg-sunken hover:text-ink"

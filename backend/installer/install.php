@@ -107,7 +107,7 @@ if (!is_file($configFile) && $ready && ($_SERVER['REQUEST_METHOD'] ?? '') === 'P
             'debug'    => false,
             'app_key'  => base64_encode(random_bytes(32)),
             'database' => ['dsn' => $dsn, 'username' => $in['db_user'], 'password' => $in['db_pass']],
-            'session'  => ['name' => 'postvak_sid', 'lifetime' => 60 * 60 * 24 * 14],
+            'session'  => ['name' => 'postvak_sid', 'lifetime' => 60 * 60 * 24 * 30],
             'rate_limit' => ['window_minutes' => 15, 'max_per_ip' => 20, 'max_per_email' => 5],
             'default_servers' => [
                 'imap_host' => $in['imap_host'], 'imap_port' => (int) $in['imap_port'], 'imap_encryption' => (int) $in['imap_port'] === 143 ? 'tls' : 'ssl',
@@ -116,6 +116,7 @@ if (!is_file($configFile) && $ready && ($_SERVER['REQUEST_METHOD'] ?? '') === 'P
             ],
             'admins' => $list($in['admin']),
             'allow_private_hosts' => false,
+            'login_custom_servers' => false,
             'allowed_login_domains' => $list($in['domains']),
             'max_attachment_mb' => 20,
             'cron_key' => '',

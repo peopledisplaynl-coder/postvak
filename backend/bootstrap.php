@@ -14,6 +14,8 @@ declare(strict_types=1);
 use Postvak\Config;
 use Postvak\Http\Response;
 
+const POSTVAK_VERSION = '1.2.0';
+
 define('POSTVAK_ROOT', __DIR__);
 
 ob_start();
@@ -37,6 +39,17 @@ set_error_handler(static function (int $severity, string $message, string $file,
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
 
+/** Is the logged-in user an admin? Never throws (used while handling errors). */
+function postvak_viewer_is_admin(): bool
+{
+    try {
+        $id = \Postvak\Auth::userId();
+        return $id !== null && \Postvak\Auth::isAdmin($id);
+    } catch (Throwable) {
+        return false;
+    }
+}
+
 register_shutdown_function(static function (): void {
     $error = error_get_last();
     if ($error === null || !in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
@@ -52,6 +65,9 @@ register_shutdown_function(static function (): void {
     }
     $timeout = str_contains($error['message'], 'Maximum execution time');
     $body = ['error' => $timeout ? 'The mail server took too long to respond' : 'Internal server error'];
+    if (!$timeout && class_exists(Config::class, false) && postvak_viewer_is_admin()) {
+        $body['error'] .= ': ' . mb_substr($error['message'], 0, 500);
+    }
     if (class_exists(Config::class, false) && Config::get('debug')) {
         $body['debug'] = ['message' => $error['message'], 'file' => $error['file'], 'line' => $error['line']];
     }
@@ -84,6 +100,10 @@ set_exception_handler(static function (Throwable $e): void {
     error_log('[postvak] ' . $e::class . ': ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
     $status = $e instanceof \Postvak\Http\HttpException ? $e->status : 500;
     $body = ['error' => $e instanceof \Postvak\Http\HttpException ? $e->getMessage() : 'Internal server error'];
+    if (!$e instanceof \Postvak\Http\HttpException && postvak_viewer_is_admin()) {
+        // Shared hosting rarely shows its error log; the admin gets the real cause on screen.
+        $body['error'] .= ': ' . mb_substr($e->getMessage(), 0, 500);
+    }
     if (Config::get('debug') && !$e instanceof \Postvak\Http\HttpException) {
         $body['debug'] = ['type' => $e::class, 'message' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()];
     }

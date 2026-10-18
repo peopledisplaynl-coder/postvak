@@ -3,6 +3,7 @@ import { ref, watch, computed, nextTick } from 'vue'
 import DOMPurify from 'dompurify'
 import AppIcon from './AppIcon.vue'
 import AttachmentViewer from './AttachmentViewer.vue'
+import InvitationCard from './InvitationCard.vue'
 import { useMail } from '../stores/mail.js'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
@@ -234,6 +235,8 @@ defineExpose({ message, reload: load, print: printMessage })
           </template>
         </div>
       </div>
+
+      <InvitationCard v-if="message.invitation" :key="key" :invitation="message.invitation" :target="target" />
 
       <iframe
         ref="frame"

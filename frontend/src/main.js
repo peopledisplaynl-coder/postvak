@@ -34,7 +34,7 @@ window.addEventListener('pagehide', () => {
 // Messages from the service worker: new mail arrived (refresh), or a notification was clicked (open it).
 navigator.serviceWorker?.addEventListener('message', (event) => {
   const msg = event.data ?? {}
-  if (msg.type === 'postvak:new-mail' && useSession().loggedIn) {
+  if (msg.type === 'postvak:new-mail' && msg.data?.type !== 'reminder' && useSession().loggedIn) {
     const mail = useMail()
     if (mail.accountId !== null) Promise.all([mail.loadMessages({ silent: true }), mail.loadFolders()])
   }

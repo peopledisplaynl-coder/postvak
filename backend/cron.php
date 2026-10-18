@@ -19,6 +19,17 @@ require __DIR__ . '/bootstrap.php';
 while (ob_get_level() > 0) {
     ob_end_clean();
 }
+// Routine log lines go to storage/logs/cron.log instead of the output: hosts such as Plesk e-mail
+// every line a cron job writes to stderr. Only a real failure (below) still ends up in that e-mail.
+$logDir = POSTVAK_ROOT . '/storage/logs';
+if (is_dir($logDir) || @mkdir($logDir, 0700, true)) {
+    $logFile = $logDir . '/cron.log';
+    if (@filesize($logFile) > 1024 * 1024) {
+        @rename($logFile, $logFile . '.1');
+    }
+    ini_set('error_log', $logFile);
+}
+
 set_exception_handler(static function (Throwable $e): void {
     fwrite(STDERR, '[postvak cron] ' . $e::class . ': ' . $e->getMessage() . "\n");
     exit(1);

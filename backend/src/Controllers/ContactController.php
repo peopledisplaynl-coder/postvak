@@ -74,8 +74,17 @@ final class ContactController
     public function export(Request $r): void
     {
         $userId = Auth::requireUser();
-        $contacts = $this->repo->list($userId, '', (string) $r->query('all', '') !== '1');
-        Response::download(VCard::write($contacts), 'postvak-contacten.vcf', 'text/vcard');
+        $all = (string) $r->query('all', '') === '1';
+        // Full cards: what a phone added (photo, birthday, address, …) is exported too.
+        $rows = \Postvak\Database::all(
+            'SELECT * FROM contacts WHERE user_id = ?' . ($all ? '' : ' AND saved = 1') . ' ORDER BY COALESCE(NULLIF(name, \'\'), email)',
+            [$userId]
+        );
+        $out = '';
+        foreach ($rows as $row) {
+            $out .= rtrim(str_replace(["\r\n", "\n"], ["\n", "\r\n"], \Postvak\Contacts\ContactCards::data($row))) . "\r\n";
+        }
+        Response::download($out, 'postvak-contacten.vcf', 'text/vcard');
     }
 
     /** @return array<string, mixed> */

@@ -133,7 +133,7 @@ defineExpose({ setContent, getHtml, getText, focus })
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
     <!-- Toolbar -->
-    <div v-if="editor" class="flex items-center gap-0.5 overflow-x-auto border-b border-line px-2 py-1 text-muted" role="toolbar" :aria-label="t('editor.toolbar')">
+    <div v-if="editor" class="flex flex-wrap items-center gap-0.5 border-b border-line px-2 py-1 text-muted" role="toolbar" :aria-label="t('editor.toolbar')">
       <div class="relative shrink-0">
         <button type="button" class="flex items-center gap-1 rounded px-2 py-1 text-sm hover:bg-sunken" :aria-expanded="headingOpen" @mousedown.prevent @click="headingOpen = !headingOpen">
           {{ blockLabel() }} <AppIcon name="chevron" :size="14" class="rotate-90" />

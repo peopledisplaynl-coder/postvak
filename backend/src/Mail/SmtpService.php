@@ -192,6 +192,13 @@ final class SmtpService
             $m->Body = $mail['html'] !== '' ? $mail['html'] : ($allowEmpty ? ' ' : '');
             $m->AltBody = self::htmlToText($mail['html']);
 
+            // An iCalendar part (meeting reply): PHPMailer adds it as text/calendar next to the text and HTML.
+            if (!empty($mail['ical'])) {
+                $m->Ical = $mail['ical'];
+                // Calendar programs read plain 8-bit text/calendar more reliably than quoted-printable.
+                $m->Encoding = PHPMailer::ENCODING_8BIT;
+            }
+
             foreach ($attachments as $a) {
                 $m->addStringAttachment($a['content'], $a['name'], PHPMailer::ENCODING_BASE64, $a['mime']);
             }

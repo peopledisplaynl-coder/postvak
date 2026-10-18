@@ -16,7 +16,9 @@ const out = (name) => join(root, 'docs', 'screenshots', `${name}.png`)
 const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || undefined })
 
 async function session(options) {
-  const context = await browser.newContext({ locale: 'en-GB', ...options })
+  const context = await browser.newContext({ locale: 'en-GB', timezoneId: 'Europe/Amsterdam', ...options })
+  // A fixed Wednesday afternoon, so the week view has events on both sides of "now".
+  await context.clock.setFixedTime(new Date('2026-10-14T13:20:00Z'))
   const page = await context.newPage()
   await page.goto(`${base}/login`)
   await page.fill('#email', 'demo@example.com')
@@ -41,7 +43,16 @@ for (const scheme of ['light', 'dark']) {
   await openFirst(page)
   await page.screenshot({ path: out(`desktop-${scheme}`) })
   if (scheme === 'light') {
-    await page.keyboard.press('Escape')
+    await page.goto(`${base}/calendar`)
+    await page.getByRole('tab', { name: 'Week', exact: true }).click()
+    await page.waitForTimeout(700)
+    await page.screenshot({ path: out('calendar-week') })
+    await page.goto(`${base}/tasks`)
+    await page.getByText('Buy strings').waitFor()
+    await page.waitForTimeout(400)
+    await page.screenshot({ path: out('tasks') })
+    await page.goto(`${base}/`)
+    await page.locator('section ul.divide-y > li').first().waitFor()
     await page.getByRole('button', { name: 'New message' }).first().click()
     await page.locator('.ProseMirror').waitFor()
     await page.locator('form input').first().fill('maria@example.org')

@@ -76,17 +76,22 @@ CREATE TABLE IF NOT EXISTS user_settings (
 CREATE TABLE IF NOT EXISTS contacts (
     id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id         INT UNSIGNED NOT NULL,
-    email           VARCHAR(255) NOT NULL,
+    email           VARCHAR(255) NULL,                 -- a card from a phone may have no address
     name            VARCHAR(255) NULL,
     phone           VARCHAR(64) NULL,
     notes           TEXT NULL,
     favorite        TINYINT(1) NOT NULL DEFAULT 0,
     saved           TINYINT(1) NOT NULL DEFAULT 0,     -- 1 = added/edited by the user, 0 = collected when sending
+    card_uri        VARCHAR(200) NULL,                 -- CardDAV name when a phone created the card
+    vcard           MEDIUMTEXT NULL,                   -- the full card as a phone sent it
+    extra_emails    VARCHAR(1000) NULL,
     times_used      INT UNSIGNED NOT NULL DEFAULT 0,
     last_used_at    DATETIME NULL,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_contacts_user_email (user_id, email),
+    UNIQUE KEY uq_contacts_card (user_id, card_uri),
     CONSTRAINT fk_contacts_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -205,6 +210,108 @@ CREATE TABLE IF NOT EXISTS message_snippets (
     CONSTRAINT fk_snippets_account FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Calendars and tasks (CalDAV, sabre/dav schema with a dav_ prefix), app passwords, sent reminders.
+CREATE TABLE IF NOT EXISTS dav_calendarobjects (
+    id INT(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    calendardata MEDIUMBLOB,
+    uri VARBINARY(200),
+    calendarid INTEGER UNSIGNED NOT NULL,
+    lastmodified INT(11) UNSIGNED,
+    etag VARBINARY(32),
+    size INT(11) UNSIGNED NOT NULL,
+    componenttype VARBINARY(8),
+    firstoccurence INT(11) UNSIGNED,
+    lastoccurence INT(11) UNSIGNED,
+    uid VARBINARY(200),
+    UNIQUE KEY uq_dav_object (calendarid, uri),
+    INDEX idx_dav_object_time (calendarid, firstoccurence)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS dav_calendars (
+    id INTEGER UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    synctoken INTEGER UNSIGNED NOT NULL DEFAULT '1',
+    components VARBINARY(21)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS dav_calendarinstances (
+    id INTEGER UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    calendarid INTEGER UNSIGNED NOT NULL,
+    principaluri VARBINARY(100),
+    access TINYINT(1) NOT NULL DEFAULT '1',
+    displayname VARCHAR(100),
+    uri VARBINARY(200),
+    description TEXT,
+    calendarorder INT(11) UNSIGNED NOT NULL DEFAULT '0',
+    calendarcolor VARBINARY(10),
+    timezone TEXT,
+    transparent TINYINT(1) NOT NULL DEFAULT '0',
+    share_href VARBINARY(100),
+    share_displayname VARCHAR(100),
+    share_invitestatus TINYINT(1) NOT NULL DEFAULT '2',
+    UNIQUE KEY uq_dav_instance_uri (principaluri, uri),
+    UNIQUE KEY uq_dav_instance_cal (calendarid, principaluri),
+    UNIQUE KEY uq_dav_instance_share (calendarid, share_href)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS dav_calendarchanges (
+    id INT(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    uri VARBINARY(200) NOT NULL,
+    synctoken INT(11) UNSIGNED NOT NULL,
+    calendarid INT(11) UNSIGNED NOT NULL,
+    operation TINYINT(1) NOT NULL,
+    INDEX idx_dav_changes (calendarid, synctoken)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS dav_calendarsubscriptions (
+    id INT(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    uri VARBINARY(200) NOT NULL,
+    principaluri VARBINARY(100) NOT NULL,
+    source TEXT,
+    displayname VARCHAR(100),
+    refreshrate VARCHAR(10),
+    calendarorder INT(11) UNSIGNED NOT NULL DEFAULT '0',
+    calendarcolor VARBINARY(10),
+    striptodos TINYINT(1) NULL,
+    stripalarms TINYINT(1) NULL,
+    stripattachments TINYINT(1) NULL,
+    lastmodified INT(11) UNSIGNED,
+    UNIQUE KEY uq_dav_subscription (principaluri, uri)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS dav_schedulingobjects (
+    id INT(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    principaluri VARBINARY(255),
+    calendardata MEDIUMBLOB,
+    uri VARBINARY(200),
+    lastmodified INT(11) UNSIGNED,
+    etag VARBINARY(32),
+    size INT(11) UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Passwords for calendar apps on phones and computers (CalDAV). Shown once, stored as an HMAC.
+CREATE TABLE IF NOT EXISTS app_passwords (
+    id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id         INT UNSIGNED NOT NULL,
+    name            VARCHAR(100) NOT NULL,
+    token_hash      CHAR(64) NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_used_at    DATETIME NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_app_password_hash (token_hash),
+    KEY idx_app_password_user (user_id),
+    CONSTRAINT fk_app_password_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Reminders already pushed (one row per object, occurrence and alarm time).
+CREATE TABLE IF NOT EXISTS calendar_alarms_sent (
+    object_id       INT UNSIGNED NOT NULL,
+    occurrence      INT UNSIGNED NOT NULL,
+    trigger_at      INT UNSIGNED NOT NULL,
+    sent_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (object_id, occurrence, trigger_at),
+    KEY idx_alarm_sent_at (sent_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Tracks applied migrations.
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version         VARCHAR(32) NOT NULL,
@@ -212,4 +319,45 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     PRIMARY KEY (version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT IGNORE INTO schema_migrations (version) VALUES ('001_initial'), ('002_trusted_senders_admin'), ('003_message_snippets'), ('004_contacts'), ('005_push_notifications'), ('006_scheduled_snooze'), ('007_two_factor'), ('008_push_language');
+-- Calendars from elsewhere, share links, CardDAV change log (see migration 010).
+CREATE TABLE IF NOT EXISTS calendar_feeds (
+    id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id         INT UNSIGNED NOT NULL,
+    instance_id     INT UNSIGNED NOT NULL,
+    url_enc         TEXT NOT NULL,
+    url_hash        CHAR(64) NOT NULL,
+    etag            VARCHAR(255) NULL,
+    last_modified   VARCHAR(100) NULL,
+    last_fetch_at   DATETIME NULL,
+    last_success_at DATETIME NULL,
+    last_error      VARCHAR(500) NULL,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_calendar_feed_url (user_id, url_hash),
+    UNIQUE KEY uq_calendar_feed_instance (instance_id),
+    CONSTRAINT fk_calendar_feed_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS calendar_shares (
+    instance_id     INT UNSIGNED NOT NULL,
+    user_id         INT UNSIGNED NOT NULL,
+    token_enc       TEXT NOT NULL,
+    token_hash      CHAR(64) NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_used_at    DATETIME NULL,
+    PRIMARY KEY (instance_id),
+    UNIQUE KEY uq_calendar_share_token (token_hash),
+    CONSTRAINT fk_calendar_share_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS contact_changes (
+    id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id         INT UNSIGNED NOT NULL,
+    uri             VARCHAR(200) NOT NULL,
+    operation       TINYINT NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_contact_changes_user (user_id, id),
+    CONSTRAINT fk_contact_changes_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_migrations (version) VALUES ('001_initial'), ('002_trusted_senders_admin'), ('003_message_snippets'), ('004_contacts'), ('005_push_notifications'), ('006_scheduled_snooze'), ('007_two_factor'), ('008_push_language'), ('009_calendar'), ('010_feeds_carddav');

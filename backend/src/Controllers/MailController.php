@@ -6,6 +6,8 @@ namespace Postvak\Controllers;
 use Postvak\Auth;
 use Postvak\Config;
 use Postvak\Database;
+use Postvak\Calendar\CalendarService;
+use Postvak\Calendar\InvitationService;
 use Postvak\Http\HttpException;
 use Postvak\Http\Request;
 use Postvak\Http\Response;
@@ -261,7 +263,39 @@ final class MailController
         $trusted = (new TrustedSenderRepository())->isTrusted((int) $account['user_id'], $fromEmail);
         $data = $this->present($account, $folder, $uid, $message, $trusted || (bool) $r->query('images', false));
         $data['trusted_sender'] = $trusted;
+
+        // Meeting invitation: a card with answer buttons instead of a cryptic .ics attachment.
+        $data['invitation'] = null;
+        try {
+            $found = InvitationService::find($message);
+            if ($found !== null) {
+                $data['invitation'] = (new InvitationService())->describe((int) $account['user_id'], $found, CalendarService::tz((string) ($r->query('tz') ?? 'UTC')));
+                // The calendar part inside the message body has no file name of its own: hide it.
+                $data['attachments'] = array_values(array_filter($data['attachments'], static fn ($a) => !(
+                    $a['index'] === $found['index'] && !str_ends_with(strtolower($a['name']), '.ics')
+                )));
+            }
+        } catch (Throwable $e) {
+            error_log('[postvak] invitation not shown: ' . $e->getMessage());
+        }
         Response::json($data);
+    }
+
+    /** POST /accounts/{id}/messages/{uid}/invitation  {folder, response: accepted|tentative|declined|remove, reply?: bool, calendar_id?} */
+    public function answerInvitation(Request $r): void
+    {
+        [$account, $imap] = $this->open($r);
+        $message = $imap->getMessage($this->folderParam($r), $r->intParam('uid'));
+        $found = InvitationService::find($message) ?? throw HttpException::notFound('No invitation in this message');
+        $response = $r->string('response');
+        if (!in_array($response, ['accepted', 'tentative', 'declined', 'remove'], true)) {
+            throw HttpException::badRequest('Unknown answer');
+        }
+        $calendarId = $r->input('calendar_id');
+        Response::json((new InvitationService())->respond(
+            (int) $account['user_id'], $account, $found, $response, (bool) $r->input('reply', true),
+            is_numeric($calendarId) ? (int) $calendarId : null,
+        ));
     }
 
     /** GET /accounts/{id}/messages/{uid}/attachments/{index}?folder=INBOX&inline=1 */

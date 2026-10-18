@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { timeZone } from '../calendar.js'
 import { api } from '../api/client.js'
 import { t, locale } from '../i18n/index.js'
 import { useSession } from './session.js'
@@ -512,7 +513,8 @@ export const useMail = defineStore('mail', {
 
     /** Full message. `ref` is a message summary or {account_id, folder, uid}. */
     async fetchMessage(ref, { images = false } = {}) {
-      return api.get(`/accounts/${ref.account_id}/messages/${ref.uid}`, { folder: ref.folder, images: images ? 1 : undefined })
+      // tz: an all-day invitation is shown on the right day.
+      return api.get(`/accounts/${ref.account_id}/messages/${ref.uid}`, { folder: ref.folder, images: images ? 1 : undefined, tz: timeZone() })
     },
   },
 })

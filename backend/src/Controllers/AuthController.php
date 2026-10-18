@@ -39,6 +39,7 @@ final class AuthController
         }
         Migrator::runQuietly(); // shared hosting has no CLI: apply database updates here
         $this->assertDomainAllowed($email);
+        $stay = $r->input('remember', true) !== false;
         RateLimiter::check($r->ip(), $email);
 
         $user = $this->users->findByLoginEmail($email);
@@ -47,7 +48,7 @@ final class AuthController
         // Known account: use its stored server settings. New: defaults + optional overrides.
         $server = $existing
             ? ServerSettings::fromAccount($existing)
-            : ServerSettings::forEmail($email, $r->body());
+            : ServerSettings::forEmail($email, self::customServersAllowed() ? $r->body() : []);
 
         try {
             ImapService::verify($server, $password);
@@ -79,13 +80,30 @@ final class AuthController
         $twoFactor = new TwoFactor();
         if ($twoFactor->enabled($userId) && !$twoFactor->isTrustedDevice($userId)) {
             session_regenerate_id(true);
-            $_SESSION = ['pending_2fa' => ['user_id' => $userId, 'email' => $email, 'until' => time() + 300, 'tries' => 0]];
+            $_SESSION = ['pending_2fa' => ['user_id' => $userId, 'email' => $email, 'until' => time() + 300, 'tries' => 0, 'stay' => $stay]];
             Response::json(['two_factor' => true]);
         }
 
         $this->users->touchLogin($userId);
-        $csrf = Auth::login($userId);
+        $csrf = Auth::login($userId, $stay);
         $this->respondWithSession($userId, $csrf);
+    }
+
+    /**
+     * Own server settings at the first login are off unless the admin allows them: whoever picks
+     * the IMAP server decides whether the password is "right", so with a free choice anyone could
+     * claim a not yet used address of an allowed domain.
+     */
+    public static function customServersAllowed(): bool
+    {
+        $stored = (new AppSettingsRepository())->get('login_custom_servers');
+        return is_bool($stored) ? $stored : (bool) \Postvak\Config::get('login_custom_servers', false);
+    }
+
+    /** GET /auth/options — what the login page shows (no session needed). */
+    public function options(Request $r): void
+    {
+        Response::json(['custom_servers' => self::customServersAllowed()]);
     }
 
     /**
@@ -115,7 +133,7 @@ final class AuthController
             $twoFactor->trustThisDevice($userId, $r->header('User-Agent'));
         }
         $this->users->touchLogin($userId);
-        $csrf = Auth::login($userId);
+        $csrf = Auth::login($userId, ($pending['stay'] ?? true) !== false);
         $this->respondWithSession($userId, $csrf);
     }
 

@@ -7,6 +7,7 @@ import MessageView from '../components/MessageView.vue'
 import AppIcon from '../components/AppIcon.vue'
 import TimePicker from '../components/TimePicker.vue'
 import ShortcutsHelp from '../components/ShortcutsHelp.vue'
+import ColumnResizer from '../components/ColumnResizer.vue'
 import { useSession } from '../stores/session.js'
 import { useMail, msgKey, ALL } from '../stores/mail.js'
 import { useToasts } from '../stores/toasts.js'
@@ -192,13 +193,49 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onVisible)
   window.removeEventListener('keydown', onKey)
 })
+
+// Column widths on larger screens, adjustable by dragging the column edge (remembered on this device).
+const columns = (() => {
+  const read = (key) => {
+    try {
+      const v = Number(localStorage.getItem(key))
+      return Number.isFinite(v) && v > 0 ? v : null
+    } catch {
+      return null
+    }
+  }
+  const sidebar = ref(read('pv-col-sidebar'))
+  const list = ref(read('pv-col-list'))
+  const save = (key, v) => {
+    try {
+      v === null ? localStorage.removeItem(key) : localStorage.setItem(key, String(v))
+    } catch {}
+  }
+  watch(sidebar, (v) => save('pv-col-sidebar', v))
+  watch(list, (v) => save('pv-col-list', v))
+  return { sidebar, list }
+})()
+const viewportWidth = ref(window.innerWidth)
+const onResize = () => (viewportWidth.value = window.innerWidth)
+onMounted(() => window.addEventListener('resize', onResize))
+onBeforeUnmount(() => window.removeEventListener('resize', onResize))
+// Defaults match the Tailwind classes: sidebar 16rem, list 360px (420px from 1280px).
+const sidebarWidth = computed(() => columns.sidebar.value ?? 256)
+const listWidth = computed(() => columns.list.value ?? (viewportWidth.value >= 1280 ? 420 : 360))
+// The reader keeps at least 360px.
+const listMax = computed(() => Math.max(300, viewportWidth.value - (viewportWidth.value >= 1024 ? sidebarWidth.value : 0) - 360))
+const layoutStyle = computed(() => ({
+  ...(columns.sidebar.value ? { '--pv-side-w': `${columns.sidebar.value}px` } : {}),
+  ...(columns.list.value ? { '--pv-list-w': `${Math.min(columns.list.value, listMax.value)}px` } : {}),
+}))
 </script>
 
 <template>
-  <div class="flex h-full overflow-hidden">
+  <div class="flex h-full overflow-hidden" :style="layoutStyle">
     <!-- Sidebar: fixed column on large screens, drawer elsewhere -->
-    <aside class="hidden w-64 shrink-0 border-r border-line lg:block">
+    <aside class="relative hidden shrink-0 border-r border-line lg:block" :class="columns.sidebar.value ? 'w-(--pv-side-w)' : 'w-64'">
       <Sidebar @navigate="navigate" @compose="compose()" />
+      <ColumnResizer :width="sidebarWidth" :min="200" :max="420" :label="t('layout.resizeSidebar')" @update:width="(w) => (columns.sidebar.value = w)" @reset="columns.sidebar.value = null" />
     </aside>
     <Transition enter-from-class="opacity-0" leave-to-class="opacity-0" enter-active-class="transition" leave-active-class="transition">
       <div v-if="drawer" class="fixed inset-0 z-30 bg-ink/40 lg:hidden" @click="drawer = false" />
@@ -211,10 +248,11 @@ onBeforeUnmount(() => {
 
     <!-- List: full width on phones (hidden while reading), fixed column from tablet up -->
     <div
-      class="min-w-0 flex-1 border-line md:w-[360px] md:border-r md:flex-none xl:w-[420px]"
-      :class="uid ? 'hidden md:block' : 'block'"
+      class="relative min-w-0 flex-1 border-line md:flex-none md:border-r"
+      :class="[uid ? 'hidden md:block' : 'block', columns.list.value ? 'md:w-(--pv-list-w)' : 'md:w-[360px] xl:w-[420px]']"
     >
       <MessageList ref="listRef" :title="title" @open="openMessage" @menu="drawer = true" @shortcuts="showShortcuts = true" />
+      <ColumnResizer class="hidden md:block" :width="listWidth" :min="280" :max="listMax" :label="t('layout.resizeList')" @update:width="(w) => (columns.list.value = w)" @reset="columns.list.value = null" />
     </div>
 
     <!-- Reader -->

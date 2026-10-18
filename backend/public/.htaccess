@@ -11,8 +11,18 @@ DirectoryIndex index.html
     RewriteCond %{HTTP:X-Forwarded-Proto} !https
     RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
+    # Calendar apps send their password in the Authorization header; pass it on to PHP.
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Calendar apps look here first (iPhone, macOS, DAVx5, Thunderbird).
+    RewriteRule ^\.well-known/(caldav|carddav)$ dav/ [R=301,L]
+
     # API: /api/... -> api/index.php
     RewriteRule ^api/(.*)$ api/index.php [QSA,L]
+
+    # CalDAV: /dav/... -> api/dav.php
+    RewriteRule ^dav(/.*)?$ api/dav.php [QSA,L]
 
     # Single-page app: everything that is not a file goes to index.html
     RewriteCond %{REQUEST_FILENAME} !-f

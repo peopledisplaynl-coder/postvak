@@ -52,7 +52,8 @@ const accounts = [
 let settings = {
   swipe_left: 'trash', swipe_right: 'archive', confirm_delete: false, undo_seconds: 5,
   theme: 'system', density: 'comfortable', show_images: 'ask', reading_pane: 'right',
-  poll_seconds: 60, unified_inbox: true, mark_read_on_open: true, sort: 'date_desc',
+  poll_seconds: 60, unified_inbox: true, mark_read_on_open: true, sort: 'date_desc', accent: 'indigo', text_size: 'normal',
+  labels: [['$label1', '#D23F3F'], ['$label2', '#E07B1A'], ['$label3', '#0F8A5F'], ['$label4', '#2C7DA0'], ['$label5', '#7A5AC8']].map(([key, color]) => ({ key, name: '', color })),
 }
 
 const senders = D.senders
@@ -90,7 +91,7 @@ function makeMessages(accountId, folder, count) {
       subject: subjects[(i * 3 + accountId) % subjects.length],
       from: { name, email }, to: [{ name: '', email: accounts[accountId - 1].email }],
       date: new Date(now - i * 1000 * 60 * 47).toISOString(),
-      seen: i > 3 && i % 5 !== 0, flagged: i % 9 === 2, answered: i % 7 === 3, has_attachments: i % 4 === 1,
+      seen: i > 3 && i % 5 !== 0, flagged: i % 9 === 2, labels: i === 1 ? ['$label1'] : i === 4 ? ['$label2', '$label4'] : [], answered: i % 7 === 3, has_attachments: i % 4 === 1,
       snippet: D.snippets[i % 4],
     }
   })
@@ -119,14 +120,53 @@ const trusted = [{ id: 1, kind: 'domain', value: 'bol.com' }]
 
 const calendarMock = createCalendarMock(nl)
 
+// Rules, out-of-office replies and templates in the demo.
+const demo = {
+  rules: [{
+    id: 1, name: nl ? 'Facturen' : 'Invoices', account_id: 1, enabled: true, match_all: true,
+    conditions: [{ field: 'subject', op: 'contains', value: nl ? 'factuur' : 'invoice' }],
+    actions: { move: 'Band', trash: false, read: false, flag: true }, times_applied: 12, last_applied_at: new Date().toISOString(),
+  }],
+  replies: accounts.map((a) => ({ account_id: a.id, email: a.email, active: false, enabled: false, starts_on: null, ends_on: null, subject: '', body: '', contacts_only: false })),
+  templates: [{ id: 1, name: nl ? 'Bedankt' : 'Thanks', subject: '', html: nl ? '<p>Bedankt voor je bericht! Ik kom er snel op terug.</p>' : '<p>Thanks for your message! I will get back to you soon.</p>' }],
+  nextId: 10,
+}
+// Request bodies can be Vue proxies, which structuredClone refuses.
+const clone = (v) => JSON.parse(JSON.stringify(v))
+function extrasMock(method, path, body) {
+  const id = Number(path.split('/')[2])
+  if (path === '/rules' && method === 'GET') return clone(demo.rules)
+  if (path === '/rules' && method === 'POST') { const r = { id: demo.nextId++, times_applied: 0, last_applied_at: null, ...clone(body) }; demo.rules.push(r); return r }
+  if (path === '/rules/order') { demo.rules = body.ids.map((i) => demo.rules.find((r) => r.id === i)); return clone(demo.rules) }
+  if (path === '/rules/apply') return { messages: 42, matched: 3 }
+  if (path.startsWith('/rules/') && (method === 'PUT' || method === 'PATCH')) { const r = demo.rules.find((x) => x.id === id); Object.assign(r, clone(body)); return clone(r) }
+  if (path.startsWith('/rules/') && method === 'DELETE') { demo.rules = demo.rules.filter((x) => x.id !== id); return null }
+  if (path === '/autoreplies') return clone(demo.replies)
+  if (path.startsWith('/autoreplies/') && method === 'PUT') {
+    const r = demo.replies.find((x) => x.account_id === id)
+    Object.assign(r, body, { starts_on: body.starts_on || null, ends_on: body.ends_on || null })
+    const today = new Date().toISOString().slice(0, 10)
+    r.active = !!r.enabled && !!r.body && (!r.starts_on || today >= r.starts_on) && (!r.ends_on || today <= r.ends_on)
+    return clone(r)
+  }
+  if (path === '/templates' && method === 'GET') return clone(demo.templates)
+  if (path === '/templates' && method === 'POST') { const tpl = { id: demo.nextId++, ...body }; demo.templates.push(tpl); return tpl }
+  if (path.startsWith('/templates/') && method === 'DELETE') { demo.templates = demo.templates.filter((x) => x.id !== id); return null }
+  return undefined
+}
+
 const wait = (ms = 250) => new Promise((r) => setTimeout(r, ms))
 const roleToPath = { archive: 'Archive', trash: 'Trash', junk: 'Junk', inbox: 'INBOX' }
 
-export async function mockRequest(method, path, { body = {}, query = {} } = {}) {
+export async function mockRequest(method, path, { body = {}, query = {}, form = null } = {}) {
   await wait()
   const m = path.match(/^\/accounts\/(\d+)(\/.*)?$/)
   const id = m ? Number(m[1]) : null
   const sub = m?.[2] ?? ''
+  // Signature images: the demo keeps them in the browser only.
+  if (path === '/signature-images' && method === 'POST') return { url: URL.createObjectURL(form.get('file')) }
+  const extra = extrasMock(method, path, body)
+  if (extra !== undefined) return extra
   const cal = calendarMock(method, path, { body, query })
   if (cal !== undefined) return cal
   const session = () => ({ user: { id: 1, login_email: accounts[0].email, is_admin: true }, accounts, settings, csrf: 'mock' })
@@ -201,6 +241,7 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
   if (path === '/unified/messages') {
     let all = accounts.flatMap((a) => box(a.id, 'INBOX')).sort((a, b) => b.date.localeCompare(a.date))
     if (query.q) all = all.filter((x) => (x.subject + x.from.name).toLowerCase().includes(query.q.toLowerCase()))
+    if (query.label) all = all.filter((x) => (x.labels ?? []).includes(query.label.toLowerCase()))
     const page = Number(query.page || 1), per = Number(query.per_page || 50)
     return { total: all.length, page, per_page: per, messages: all.slice((page - 1) * per, page * per), errors: [] }
   }
@@ -215,6 +256,7 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
   if (sub === '/messages') {
     let list = box(id, query.folder || 'INBOX')
     if (query.q) list = list.filter((x) => (x.subject + x.from.name).toLowerCase().includes(query.q.toLowerCase()))
+    if (query.label) list = list.filter((x) => (x.labels ?? []).includes(query.label.toLowerCase()))
     const by = {
       date_desc: (a, b) => b.date.localeCompare(a.date),
       date_asc: (a, b) => a.date.localeCompare(b.date),
@@ -264,6 +306,17 @@ export async function mockRequest(method, path, { body = {}, query = {} } = {}) 
     return { moved: body.uids.length, target }
   }
 
+  if (sub === '/labels') {
+    for (const uid of body.uids) {
+      const msg = box(id, body.folder).find((x) => x.uid === uid)
+      if (!msg) continue
+      const set = new Set(msg.labels ?? [])
+      for (const k of body.add ?? []) set.add(k.toLowerCase())
+      for (const k of body.remove ?? []) set.delete(k.toLowerCase())
+      msg.labels = [...set]
+    }
+    return { ok: true }
+  }
   if (sub === '/flags') {
     for (const uid of body.uids) {
       const msg = box(id, body.folder).find((x) => x.uid === uid)

@@ -289,7 +289,7 @@ const chipStyle = (ev) => ({ background: `color-mix(in srgb, ${ev.color} 16%, va
             @click="view = key; key === 'week' && dayCount === 1 && (cursor = parseYmd(selectedDay))"
           >{{ label }}</button>
         </div>
-        <div class="flex min-w-0 flex-1 gap-1 no-scrollbar overflow-x-auto">
+        <div class="flex min-w-0 flex-1 gap-1 overflow-x-auto">
           <button
             v-for="c in eventCalendars" :key="c.id"
             class="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ring-1 ring-line"

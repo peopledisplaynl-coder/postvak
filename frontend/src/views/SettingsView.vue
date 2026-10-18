@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
 import AccountForm from '../components/AccountForm.vue'
 import CalendarSettings from '../components/CalendarSettings.vue'
+import RulesSettings from '../components/RulesSettings.vue'
+import AppearanceSettings from '../components/AppearanceSettings.vue'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
 import { api } from '../api/client.js'
@@ -18,7 +20,7 @@ const session = useSession()
 const toasts = useToasts()
 const mail = useMail()
 
-const tabs = ['general', 'swipe', 'notifications', 'calendar', 'privacy', 'security', 'folders', 'accounts']
+const tabs = ['general', 'appearance', 'swipe', 'notifications', 'rules', 'calendar', 'privacy', 'security', 'folders', 'accounts']
 const tab = computed(() => (tabs.includes(route.params.tab) ? route.params.tab : 'general'))
 const editing = ref(null) // account id, 'new' or null
 
@@ -306,7 +308,7 @@ const pollOptions = [30, 60, 120, 300, 600]
       <h1 class="text-xl font-semibold">{{ t('settings.title') }}</h1>
     </header>
 
-    <nav class="flex gap-1 no-scrollbar overflow-x-auto px-4" role="tablist">
+    <nav class="flex flex-wrap gap-1 gap-y-1.5 px-4" role="tablist">
       <router-link
         v-for="name in tabs"
         :key="name"
@@ -325,21 +327,6 @@ const pollOptions = [30, 60, 120, 300, 600]
           <select :value="session.settings.language ?? 'auto'" class="min-w-0 rounded-lg bg-sunken px-3 py-1.5" @change="set('language', $event.target.value)">
             <option value="auto">{{ t('settings.languageAuto') }}</option>
             <option v-for="(name, code) in languageNames" :key="code" :value="code">{{ name }}</option>
-          </select>
-        </label>
-        <label class="flex items-center justify-between gap-4 px-4 py-3">
-          <span>{{ t('settings.theme') }}</span>
-          <select :value="session.settings.theme" class="rounded-lg bg-sunken px-3 py-1.5" @change="set('theme', $event.target.value)">
-            <option value="system">{{ t('settings.themeSystem') }}</option>
-            <option value="light">{{ t('settings.themeLight') }}</option>
-            <option value="dark">{{ t('settings.themeDark') }}</option>
-          </select>
-        </label>
-        <label class="flex items-center justify-between gap-4 px-4 py-3">
-          <span>{{ t('settings.density') }}</span>
-          <select :value="session.settings.density" class="rounded-lg bg-sunken px-3 py-1.5" @change="set('density', $event.target.value)">
-            <option value="comfortable">{{ t('settings.comfortable') }}</option>
-            <option value="compact">{{ t('settings.compact') }}</option>
           </select>
         </label>
         <label class="flex items-center justify-between gap-4 px-4 py-3">
@@ -618,6 +605,8 @@ const pollOptions = [30, 60, 120, 300, 600]
 
       <!-- Calendar and tasks: calendars, linking phones (CalDAV) -->
       <CalendarSettings v-else-if="tab === 'calendar'" />
+      <RulesSettings v-else-if="tab === 'rules'" />
+      <AppearanceSettings v-else-if="tab === 'appearance'" />
 
       <!-- Folders -->
       <div v-else-if="tab === 'folders'" class="space-y-4">

@@ -28,7 +28,7 @@ export function setUnauthorizedHandler(fn) {
  * Pass `form` (FormData) instead of `body` for uploads.
  */
 export async function request(method, path, { body, form, query, keepalive } = {}) {
-  if (USE_MOCK) return mockRequest(method, path, { body, query })
+  if (USE_MOCK) return mockRequest(method, path, { body, query, form })
 
   const qs = query ? '?' + new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== null && v !== '')) : ''
   const headers = { Accept: 'application/json' }

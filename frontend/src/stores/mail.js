@@ -54,6 +54,7 @@ export const useMail = defineStore('mail', {
     pending: new Map(),   // pendingKey -> batch
     drag: null,           // { messages, accountId } while messages are dragged (accountId null = mixed)
     snoozeRequest: null,  // messages waiting for a snooze time (the picker is shown by MailView)
+    labelFilter: null,    // only messages with this label (IMAP keyword) in the current folder
   }),
 
   getters: {
@@ -69,7 +70,7 @@ export const useMail = defineStore('mail', {
     sort: () => useSession().settings.sort ?? 'date_desc',
     /** Ask for conversations? Only in date order (like Gmail), never for drafts. */
     wantThreads() {
-      return useSession().settings.conversations !== false && this.sort === 'date_desc' && this.folderRole !== 'drafts'
+      return useSession().settings.conversations !== false && this.sort === 'date_desc' && this.folderRole !== 'drafts' && !this.labelFilter
     },
     selecting: (s) => s.selected.length > 0,
     selectedMessages: (s) => s.messages.filter((m) => s.selected.includes(msgKey(m))),
@@ -88,6 +89,7 @@ export const useMail = defineStore('mail', {
         this.total = 0
         this.openKey = null
         this.selected = []
+        this.labelFilter = null
       }
       await Promise.all([this.loadFolders(), this.loadMessages()])
     },
@@ -109,6 +111,7 @@ export const useMail = defineStore('mail', {
         page, per_page: PER_PAGE, q: this.search, sort: this.sort,
         threads: this.wantThreads ? 1 : undefined,
         body: this.search && this.searchBody ? 1 : undefined,
+        label: this.labelFilter || undefined,
       }
       return this.unified
         ? api.get('/unified/messages', query)
@@ -117,11 +120,11 @@ export const useMail = defineStore('mail', {
 
     async loadMessages({ silent = false } = {}) {
       if (!silent) this.loading = true
-      const requested = `${this.accountId}:${this.folderPath}:${this.search}`
+      const requested = `${this.accountId}:${this.folderPath}:${this.search}:${this.labelFilter}`
       try {
         const data = await this.listRequest(1)
         // Ignore the answer if the user switched folder in the meantime.
-        if (requested !== `${this.accountId}:${this.folderPath}:${this.search}`) return
+        if (requested !== `${this.accountId}:${this.folderPath}:${this.search}:${this.labelFilter}`) return
         // Do not resurrect messages that are waiting to be archived/deleted/moved.
         this.messages = (data?.messages ?? []).filter((m) => !this.pending.has(pendingKey(m)))
         this.total = data?.total ?? this.messages.length
@@ -352,6 +355,40 @@ export const useMail = defineStore('mail', {
             if (m.thread && b.unseen !== undefined) m.thread.unseen = b.unseen
           })
           useToasts().error(t('toast.failed', { msg: e.message }))
+        }
+      }
+    },
+
+    /**
+     * Turn a label on or off for messages (on a conversation row: every message in it).
+     * The open message in the reader is passed separately so its label list updates too.
+     */
+    /** Show only messages with this label (null = all). */
+    async filterLabel(key) {
+      if (this.labelFilter === key) return
+      this.labelFilter = key
+      this.messages = []
+      this.total = 0
+      this.selected = []
+      await this.loadMessages()
+    },
+
+    async setLabel(messages, key, on, extra = []) {
+      const lower = key.toLowerCase()
+      const all = [...messages, ...extra]
+      const before = all.map((m) => [...(m.labels ?? [])])
+      all.forEach((m) => {
+        const set = new Set((m.labels ?? []).map((k) => k.toLowerCase()))
+        on ? set.add(lower) : set.delete(lower)
+        m.labels = [...set]
+      })
+      for (const group of groupByMailbox(messages.length ? messages : extra)) {
+        try {
+          await api.post(`/accounts/${group.accountId}/labels`, { folder: group.folder, uids: group.messages.flatMap(uidsOf), [on ? 'add' : 'remove']: [key] })
+        } catch (e) {
+          all.forEach((m, i) => (m.labels = before[i]))
+          useToasts().error(t('toast.failed', { msg: e.message }))
+          return
         }
       }
     },

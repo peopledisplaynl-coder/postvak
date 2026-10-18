@@ -7,6 +7,7 @@ use PHPMailer\PHPMailer\Exception as MailerException;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use Postvak\Crypto;
+use Postvak\Database;
 use Postvak\Http\HttpException;
 
 /**
@@ -182,6 +183,9 @@ final class SmtpService
             if (!empty($mail['references'])) {
                 $m->addCustomHeader('References', $mail['references']);
             }
+            foreach ($mail['headers'] ?? [] as $name => $value) {
+                $m->addCustomHeader((string) $name, (string) $value);
+            }
             // Drafts remember which message they answer, so "answered" can be set when sent later.
             if (!empty($mail['reply_ref'])) {
                 $m->addCustomHeader(self::REPLY_HEADER, $mail['reply_ref']);
@@ -189,6 +193,7 @@ final class SmtpService
 
             $m->isHTML(true);
             $m->Subject = $mail['subject'];
+            $mail['html'] = self::embedSignatureImages($m, (int) ($account['user_id'] ?? 0), (string) $mail['html']);
             $m->Body = $mail['html'] !== '' ? $mail['html'] : ($allowEmpty ? ' ' : '');
             $m->AltBody = self::htmlToText($mail['html']);
 
@@ -206,6 +211,36 @@ final class SmtpService
             throw HttpException::badRequest($m->ErrorInfo ?: $e->getMessage());
         }
         return $m;
+    }
+
+    /**
+     * Signature images (src="/api/signature-images/<token>") become inline attachments with a cid: link,
+     * so they show in every mail program without loading anything from the internet.
+     */
+    public static function embedSignatureImages(PHPMailer $m, int $userId, string $html): string
+    {
+        if ($userId === 0 || !str_contains($html, 'signature-images/')) {
+            return $html;
+        }
+        $done = [];
+        return preg_replace_callback(
+            '#(src=["\'])(?:https?://[^"\'/]+)?(?:/[^"\']*)?/api/signature-images/([a-f0-9]{32})(["\'])#',
+            static function (array $mm) use ($m, $userId, &$done): string {
+                $token = $mm[2];
+                if (!isset($done[$token])) {
+                    $row = Database::one('SELECT mime, data FROM signature_images WHERE token = ? AND user_id = ?', [$token, $userId]);
+                    if ($row === null) {
+                        return $mm[0];
+                    }
+                    $cid = 'sig-' . substr($token, 0, 12) . '@postvak';
+                    $ext = \Postvak\Controllers\SignatureImageController::TYPES[$row['mime']] ?? 'png';
+                    $m->addStringEmbeddedImage((string) $row['data'], $cid, 'logo.' . $ext, PHPMailer::ENCODING_BASE64, (string) $row['mime']);
+                    $done[$token] = $cid;
+                }
+                return $mm[1] . 'cid:' . $done[$token] . $mm[3];
+            },
+            $html
+        ) ?? $html;
     }
 
     private static function htmlToText(string $html): string

@@ -198,6 +198,56 @@ async function openDraft(summary) {
 
 // ---- autosave
 
+// ---- templates (reusable texts)
+const templates = ref(null)
+const templatesOpen = ref(false)
+
+async function toggleTemplates() {
+  templatesOpen.value = !templatesOpen.value
+  if (templatesOpen.value && templates.value === null) {
+    try {
+      templates.value = await api.get('/templates')
+    } catch (e) {
+      templates.value = []
+      toasts.error(t('toast.failed', { msg: e.message }))
+    }
+  }
+}
+
+function useTemplate(tpl) {
+  templatesOpen.value = false
+  editor.value?.insertContent(tpl.html)
+  if (tpl.subject && !subject.value.trim()) subject.value = tpl.subject
+  markDirty()
+}
+
+async function saveTemplate() {
+  templatesOpen.value = false
+  if (!editor.value?.getText().trim()) {
+    toasts.error(t('templates.empty'))
+    return
+  }
+  const name = prompt(t('templates.namePrompt'), subject.value.trim())
+  if (!name?.trim()) return
+  try {
+    const tpl = await api.post('/templates', { name: name.trim(), subject: subject.value.trim(), html: editor.value.getHtml() })
+    templates.value = [...(templates.value ?? []), tpl].sort((a, b) => a.name.localeCompare(b.name))
+    toasts.show(t('templates.saved', { name: tpl.name }))
+  } catch (e) {
+    toasts.error(t('toast.failed', { msg: e.message }))
+  }
+}
+
+async function deleteTemplate(tpl) {
+  if (!confirm(t('templates.confirmDelete', { name: tpl.name }))) return
+  try {
+    await api.del(`/templates/${tpl.id}`)
+    templates.value = templates.value.filter((x) => x.id !== tpl.id)
+  } catch (e) {
+    toasts.error(t('toast.failed', { msg: e.message }))
+  }
+}
+
 function markDirty() {
   if (!ready) return
   dirty = true
@@ -482,6 +532,24 @@ async function discard() {
         <button type="button" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-danger" :title="t('compose.discard')" @click="discard">
           <AppIcon name="trash" />
         </button>
+        <div class="relative">
+          <button type="button" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('templates.title')" :aria-expanded="templatesOpen" @click="toggleTemplates">
+            <AppIcon name="template" />
+          </button>
+          <div v-if="templatesOpen" class="fixed inset-0 z-20" @click="templatesOpen = false" />
+          <div v-if="templatesOpen" class="absolute right-0 z-30 mt-1 w-72 overflow-hidden rounded-xl bg-surface py-1 text-sm shadow-lg ring-1 ring-line">
+            <p class="px-3 pt-1 pb-1.5 text-xs font-medium text-muted">{{ t('templates.title') }}</p>
+            <p v-if="templates === null" class="px-3 py-2 text-muted">…</p>
+            <p v-else-if="!templates.length" class="px-3 py-2 text-muted">{{ t('templates.none') }}</p>
+            <div v-for="tpl in templates ?? []" :key="tpl.id" class="group flex items-center hover:bg-sunken">
+              <button type="button" class="min-w-0 flex-1 truncate px-3 py-2 text-left" @click="useTemplate(tpl)">{{ tpl.name }}</button>
+              <button type="button" class="mr-1 rounded p-1 text-muted opacity-60 hover:text-danger group-hover:opacity-100" :title="t('templates.delete')" @click="deleteTemplate(tpl)"><AppIcon name="close" :size="15" /></button>
+            </div>
+            <button type="button" class="flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-accent hover:bg-sunken" @click="saveTemplate">
+              <AppIcon name="plus" :size="15" />{{ t('templates.saveCurrent') }}
+            </button>
+          </div>
+        </div>
         <button type="button" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('compose.attach')" @click="fileInput.click()">
           <AppIcon name="paperclip" />
         </button>

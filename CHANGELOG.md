@@ -3,6 +3,34 @@
 All notable changes to Postvak. The format follows [Keep a Changelog](https://keepachangelog.com/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-10-18
+
+### Added
+- Signatures with a logo or other image: a rich text editor for the signature, images are scaled down and sent as
+  embedded images, so recipients see them without loading remote images.
+- Labels: Important, Work, Personal, To do and Later (the same as in Thunderbird) plus your own, with colours.
+  Label messages from the reader or a selection, see them in the list, filter a folder on a label in the sidebar,
+  and let a rule add a label.
+- Appearance tab: light or dark, 8 accent colours, text size (small, normal, large) and list density.
+
+## [1.3.0] - 2026-10-18
+
+### Added
+- Rules for new mail (Settings → Rules & away): move to a folder, mark as read, star or move to trash when the
+  sender, recipient or subject matches. Make one straight from a message; apply to the inbox now.
+- Out-of-office reply per account, with optional start and end date and "only to my contacts". One reply per
+  sender per 4 days; mailing lists, automatic mail and no-reply addresses get none.
+- Templates in the composer: insert a saved text, or save the current one.
+
+### Changed
+- The cron job runs rules before the new-mail notification, so mail that a rule moves away is not announced.
+
+## [1.2.1] - 2026-10-18
+
+### Fixed
+- The tabs of Settings and Admin could not all be reached with a mouse (the scrollbar was hidden): they now wrap
+  onto a second line. The same for the filters on the contacts and tasks pages.
+
 ## [1.2.0] - 2026-10-18
 
 ### Added
@@ -139,6 +167,9 @@ First public release.
 - First version: login with mailbox credentials, multiple accounts, swipe actions with undo,
   sanitised reader, composer, settings, responsive layout, dark mode, PWA, FTP deploy.
 
+[1.4.0]: ../../releases/tag/v1.4.0
+[1.3.0]: ../../releases/tag/v1.3.0
+[1.2.1]: ../../releases/tag/v1.2.1
 [1.2.0]: ../../releases/tag/v1.2.0
 [1.1.2]: ../../releases/tag/v1.1.2
 [1.1.1]: ../../releases/tag/v1.1.1

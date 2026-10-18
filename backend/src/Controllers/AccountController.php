@@ -58,6 +58,16 @@ final class AccountController
             throw HttpException::badRequest('Invalid colour');
         }
 
+        if (isset($body['signature_html'])) {
+            $sig = (string) $body['signature_html'];
+            if (strlen($sig) > 20000) {
+                throw HttpException::badRequest('The signature is too long');
+            }
+            // Images belong in the signature as uploaded files, not as data: URIs; nothing active either.
+            $sig = preg_replace('#<(script|style|iframe|object|embed)\b[^>]*>.*?</\1>#is', '', $sig) ?? '';
+            $body['signature_html'] = preg_replace('/\son\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $sig) ?? '';
+        }
+
         // Changed server settings or password: verify before saving.
         if ($serverChanged || $newPassword !== null) {
             $merged = array_merge($account, array_intersect_key($body, array_flip($serverKeys)));

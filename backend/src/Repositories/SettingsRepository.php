@@ -31,7 +31,19 @@ final class SettingsRepository
         'conversations'    => true,            // group messages into conversations (date order only)
         'undo_send'        => 5,               // seconds to undo "send" (0 = send right away)
         'language'         => 'auto',          // auto (browser) | nl | en
+        'accent'           => 'indigo',        // colour of buttons and highlights
+        'text_size'        => 'normal',        // small | normal | large
+        // Labels = IMAP keywords. The first five use Thunderbird's keywords, so they show there too.
+        'labels'           => [
+            ['key' => '$label1', 'name' => '', 'color' => '#D23F3F'],   // Important
+            ['key' => '$label2', 'name' => '', 'color' => '#E07B1A'],   // Work
+            ['key' => '$label3', 'name' => '', 'color' => '#0F8A5F'],   // Personal
+            ['key' => '$label4', 'name' => '', 'color' => '#2C7DA0'],   // To do
+            ['key' => '$label5', 'name' => '', 'color' => '#7A5AC8'],   // Later
+        ],
     ];
+
+    public const ACCENTS = ['indigo', 'blue', 'teal', 'green', 'orange', 'rose', 'purple', 'graphite'];
 
     private const RULES = [
         'swipe_left'        => ['enum', self::SWIPE_ACTIONS],
@@ -49,6 +61,9 @@ final class SettingsRepository
         'conversations'     => ['bool'],
         'undo_send'         => ['int', 0, 30],
         'language'          => ['enum', ['auto', 'nl', 'en']],
+        'accent'            => ['enum', self::ACCENTS],
+        'text_size'         => ['enum', ['small', 'normal', 'large']],
+        'labels'            => ['labels'],
     ];
 
     public function get(int $userId): array
@@ -112,6 +127,24 @@ final class SettingsRepository
                 return $value;
             case 'bool':
                 return (bool) $value;
+            case 'labels':
+                // [{key, name, color}], at most 20; an empty name means "use the translated default name".
+                if (!is_array($value) || count($value) > 20) {
+                    throw HttpException::badRequest('Invalid labels');
+                }
+                $out = [];
+                $seen = [];
+                foreach (array_values($value) as $l) {
+                    $key = (string) ($l['key'] ?? '');
+                    $color = (string) ($l['color'] ?? '');
+                    $name = trim((string) ($l['name'] ?? ''));
+                    if (!preg_match('/^\$?[A-Za-z0-9_.-]{1,40}$/', $key) || !preg_match('/^#[0-9A-Fa-f]{6}$/', $color) || mb_strlen($name) > 40 || isset($seen[strtolower($key)])) {
+                        throw HttpException::badRequest('Invalid label');
+                    }
+                    $seen[strtolower($key)] = true;
+                    $out[] = ['key' => $key, 'name' => $name, 'color' => strtoupper($color)];
+                }
+                return $out;
             case 'int':
                 $int = filter_var($value, FILTER_VALIDATE_INT);
                 if ($int === false || $int < $rule[1] || $int > $rule[2]) {

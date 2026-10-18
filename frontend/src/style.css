@@ -41,6 +41,28 @@
   --color-snooze: #A48BEA;
 }
 
+/* Accent colours (Settings → Appearance); indigo is the default above. */
+html[data-accent='blue'] { --color-accent: #1D6FD8; --color-accent-soft: #E3EEFC; --color-read: #1D6FD8; }
+html[data-accent='blue'].dark { --color-accent: #5EA2F5; --color-accent-soft: #16304F; --color-read: #5EA2F5; }
+html[data-accent='teal'] { --color-accent: #0E7C86; --color-accent-soft: #DDF2F3; --color-read: #0E7C86; }
+html[data-accent='teal'].dark { --color-accent: #3FC1C9; --color-accent-soft: #123B3E; --color-read: #3FC1C9; }
+html[data-accent='green'] { --color-accent: #1E8A4C; --color-accent-soft: #E1F3E8; --color-read: #1E8A4C; }
+html[data-accent='green'].dark { --color-accent: #4CC27F; --color-accent-soft: #16382A; --color-read: #4CC27F; }
+html[data-accent='orange'] { --color-accent: #C2570C; --color-accent-soft: #FBEBDD; --color-read: #C2570C; }
+html[data-accent='orange'].dark { --color-accent: #F2934A; --color-accent-soft: #43291A; --color-read: #F2934A; }
+html[data-accent='rose'] { --color-accent: #C7365F; --color-accent-soft: #FBE4EB; --color-read: #C7365F; }
+html[data-accent='rose'].dark { --color-accent: #F17A9C; --color-accent-soft: #45202C; --color-read: #F17A9C; }
+html[data-accent='purple'] { --color-accent: #7C3AED; --color-accent-soft: #EEE6FD; --color-read: #7C3AED; }
+html[data-accent='purple'].dark { --color-accent: #A98BF6; --color-accent-soft: #2E2550; --color-read: #A98BF6; }
+html[data-accent='graphite'] { --color-accent: #374151; --color-accent-soft: #E5E7EB; --color-read: #374151; }
+html[data-accent='graphite'].dark { --color-accent: #7C8798; --color-accent-soft: #2A303A; --color-read: #7C8798; }
+
+/* Text size (Settings → Appearance): everything sized in rem scales along. */
+html[data-text-size='small'] { font-size: 15px; }
+html[data-text-size='small'] body { font-size: 14px; }
+html[data-text-size='large'] { font-size: 17.5px; }
+html[data-text-size='large'] body { font-size: 16.5px; }
+
 html,
 body,
 #app {

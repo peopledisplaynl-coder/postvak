@@ -7,6 +7,7 @@ import { useMail, msgKey, uidsOf } from '../stores/mail.js'
 import { useToasts } from '../stores/toasts.js'
 import { listDate, laterDate, displayName, avatarColor, initials } from '../format.js'
 import { t, locale } from '../i18n/index.js'
+import { labelsOfMessage, labelName } from '../labels.js'
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -23,6 +24,7 @@ const rightAction = computed(() => session.settings.swipe_right ?? 'archive')
 const key = computed(() => msgKey(props.message))
 const selected = computed(() => mail.selected.includes(key.value))
 const account = computed(() => session.accountById(props.message.account_id))
+const labels = computed(() => labelsOfMessage(session.settings, props.message))
 
 const { offset, dragging, flying, direction, progress, armed, handlers: swipe } = useSwipe({
   // No swiping while selecting several messages.
@@ -259,6 +261,12 @@ function onClick() {
             <span v-if="compact && message.snippet" class="text-muted"> – {{ message.snippet }}</span>
           </span>
           <span class="ml-auto flex shrink-0 items-center gap-1 text-muted">
+            <span
+              v-for="l in labels" :key="l.key"
+              class="hidden max-w-24 truncate rounded-full px-1.5 py-px text-[11px] font-medium leading-4 sm:inline-block"
+              :style="{ background: l.color + '22', color: l.color }"
+            >{{ labelName(l) }}</span>
+            <span v-for="l in labels" :key="'dot' + l.key" class="size-2 rounded-full sm:hidden" :style="{ background: l.color }" :title="labelName(l)" />
             <AppIcon v-if="message.answered" name="reply" :size="14" />
             <AppIcon v-if="message.has_attachments" name="paperclip" :size="14" />
             <AppIcon v-if="message.flagged" name="flag" :size="15" class="text-flag fill-current" />

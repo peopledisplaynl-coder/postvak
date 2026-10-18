@@ -14,7 +14,7 @@ declare(strict_types=1);
 use Postvak\Config;
 use Postvak\Http\Response;
 
-const POSTVAK_VERSION = '1.2.0';
+const POSTVAK_VERSION = '1.4.0';
 
 define('POSTVAK_ROOT', __DIR__);
 

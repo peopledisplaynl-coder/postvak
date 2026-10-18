@@ -86,6 +86,7 @@ final class Snoozer
             $imap = null;
             try {
                 $imap = new ImapService($account);
+                [, $nextBefore] = $imap->inboxState();
                 $snoozed = $imap->roleFolder('snoozed', false);
                 foreach ($rows as $row) {
                     $uids = $snoozed ? $imap->uidsByMessageId($snoozed, $row['message_id']) : [];
@@ -99,6 +100,8 @@ final class Snoozer
                     }
                     Database::run('DELETE FROM snoozes WHERE id = ?', [$row['id']]);
                 }
+                // Returned mail is not new mail: rules must not move it away again.
+                MailProcessor::skipReturned((int) $accountId, $nextBefore, $imap->inboxState()[1]);
                 $log(sprintf('%s: %d snoozed message(s) back', $account['email'], count($rows)));
             } catch (Throwable $e) {
                 $stats['errors']++;

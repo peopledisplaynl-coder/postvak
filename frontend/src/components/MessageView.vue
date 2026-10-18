@@ -1,6 +1,8 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import LabelMenu from './LabelMenu.vue'
+import { labelsOfMessage, labelName } from '../labels.js'
 import AppIcon from './AppIcon.vue'
 import FolderPicker from './FolderPicker.vue'
 import MessageBody from './MessageBody.vue'
@@ -101,7 +103,12 @@ function markConversationRead(list) {
 }
 
 /** Single message loaded: mark it read (like before). */
+const loaded = ref(null) // the open message as the reader loaded it (single message)
+watch(targetKey, () => (loaded.value = null))
+const readerLabels = computed(() => labelsOfMessage(session.settings, loaded.value ?? summary.value))
+
 function onSingleLoaded(data) {
+  loaded.value = data
   if (!titleReady.value) subject.value = data.subject
   titleReady.value = true
   if (!data.seen && session.settings.mark_read_on_open && summary.value) mail.setFlag(summary.value, 'seen', true)
@@ -200,6 +207,7 @@ function reply(payload) {
         <button v-if="!['drafts', 'sent', 'scheduled'].includes(role)" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="role === 'snoozed' ? t('later.otherTime') : t('actions.snooze')" @click="mail.snoozeRequest = [summary]"><AppIcon name="clock" /></button>
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.move')" @click="picking = true"><AppIcon name="move" /></button>
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('tasks.fromMail')" @click="makeTask"><AppIcon name="task" /></button>
+        <LabelMenu v-if="session.settings.labels?.length && (summary || loaded)" :messages="summary ? [summary] : []" :extra="loaded ? [loaded] : []" />
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.markUnread')" @click="mail.setFlag(summary, 'seen', false); emit('back')"><AppIcon name="unread" /></button>
         <button class="rounded-lg p-2 hover:bg-sunken" :class="summary.flagged ? 'text-flag' : 'text-muted hover:text-ink'" :title="t('actions.flag')" @click="mail.setFlag(summary, 'flagged', !summary.flagged)">
           <AppIcon name="flag" :class="summary.flagged ? 'fill-current' : ''" />
@@ -238,6 +246,13 @@ function reply(payload) {
           {{ subject || t('list.noSubject') }}
           <span v-if="isConversation" class="ml-1 align-middle text-sm font-normal text-muted">{{ t('reader.inConversation', { n: items.length }) }}</span>
         </h2>
+        <div v-if="titleReady && readerLabels.length" class="mt-2 flex flex-wrap gap-1.5">
+          <span
+            v-for="l in readerLabels" :key="l.key"
+            class="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+            :style="{ background: l.color + '22', color: l.color }"
+          ><span class="size-1.5 rounded-full" :style="{ background: l.color }" />{{ labelName(l) }}</span>
+        </div>
 
         <!-- Conversation -->
         <ol v-if="isConversation" class="mt-4 divide-y divide-line overflow-hidden rounded-2xl ring-1 ring-line">

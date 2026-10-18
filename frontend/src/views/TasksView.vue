@@ -169,7 +169,7 @@ function focusQuick() {
     </header>
 
     <div class="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
-      <div v-if="taskLists.length > 1" class="flex gap-1 no-scrollbar overflow-x-auto px-3 pt-3">
+      <div v-if="taskLists.length > 1" class="flex flex-wrap gap-1 px-3 pt-3">
         <button class="shrink-0 rounded-full px-3 py-1 text-sm ring-1 ring-line" :class="listFilter === 'all' ? 'bg-ink text-surface ring-ink' : ''" @click="listFilter = 'all'">{{ t('tasks.allLists') }}</button>
         <button
           v-for="l in taskLists" :key="l.id"

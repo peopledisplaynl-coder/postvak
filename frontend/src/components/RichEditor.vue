@@ -17,7 +17,7 @@ import { t } from '../i18n/index.js'
  *
  * Emits: update (content changed by the user), files (File[] pasted), submit (Ctrl+Enter).
  */
-const props = defineProps({ placeholder: { type: String, default: '' } })
+const props = defineProps({ placeholder: { type: String, default: '' }, initial: { type: String, default: '' } })
 const emit = defineEmits(['update', 'files', 'submit'])
 
 const COLORS = ['#1f2328', '#6b7280', '#c2463c', '#c27a0e', '#0f8a5f', '#2c7da0', '#3646d9', '#7a5ac8']
@@ -25,6 +25,7 @@ const colorOpen = ref(false)
 const headingOpen = ref(false)
 
 const editor = useEditor({
+  content: props.initial || '',
   extensions: [
     StarterKit.configure({
       heading: { levels: [2, 3] },
@@ -123,11 +124,16 @@ function getText() {
   return editor.value?.getText() ?? ''
 }
 
+/** Insert HTML at the cursor (a template); counts as a change. */
+function insertContent(html) {
+  editor.value?.chain().focus().insertContent(html || '').run()
+}
+
 function focus(where = 'start') {
   editor.value?.commands.focus(where)
 }
 
-defineExpose({ setContent, getHtml, getText, focus })
+defineExpose({ setContent, getHtml, getText, focus, insertContent })
 </script>
 
 <template>

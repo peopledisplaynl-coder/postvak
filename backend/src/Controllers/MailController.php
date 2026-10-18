@@ -66,6 +66,7 @@ final class MailController
             try {
                 $imap = new ImapService($account);
                 $imap->setSearchInBody($r->query('body') === '1');
+                $imap->setKeywordFilter($r->query('label') ?: null);
                 $cache = new SnippetCache((int) $account['id']);
                 $list = $threads
                     ? $imap->listThreads('INBOX', 1, $need, $q === '' ? null : $q, $cache)
@@ -143,6 +144,7 @@ final class MailController
         $cache = new SnippetCache((int) $account['id']);
         $folder = $this->folderParam($r);
         $imap->setSearchInBody($r->query('body') === '1');
+        $imap->setKeywordFilter($r->query('label') ?: null);
         // threads=1: one row per conversation (only in date order, like Gmail).
         $list = $r->query('threads') === '1' && $sort === 'date_desc'
             ? $imap->listThreads($folder, $page, $perPage, $q === '' ? null : $q, $cache)
@@ -263,6 +265,11 @@ final class MailController
         $trusted = (new TrustedSenderRepository())->isTrusted((int) $account['user_id'], $fromEmail);
         $data = $this->present($account, $folder, $uid, $message, $trusted || (bool) $r->query('images', false));
         $data['trusted_sender'] = $trusted;
+        try {
+            $data['labels'] = $imap->labelsOf($folder, $uid);
+        } catch (Throwable) {
+            $data['labels'] = [];
+        }
 
         // Meeting invitation: a card with answer buttons instead of a cryptic .ics attachment.
         $data['invitation'] = null;
@@ -369,6 +376,15 @@ final class MailController
         [, $imap] = $this->open($r);
         $flags = array_intersect_key($r->body(), array_flip(['seen', 'flagged', 'answered']));
         $imap->setFlags($this->folderParam($r), $this->uids($r), array_map('boolval', $flags));
+        Response::json(['ok' => true]);
+    }
+
+    /** POST /accounts/{id}/labels  {folder, uids, add?: [keyword], remove?: [keyword]} */
+    public function labels(Request $r): void
+    {
+        [, $imap] = $this->open($r);
+        $clean = static fn ($v) => array_values(array_filter(array_map('strval', (array) $v), [ImapService::class, 'validKeyword']));
+        $imap->setLabels($this->folderParam($r), $this->uids($r), $clean($r->input('add', [])), $clean($r->input('remove', [])));
         Response::json(['ok' => true]);
     }
 

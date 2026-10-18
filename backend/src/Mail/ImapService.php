@@ -356,6 +356,44 @@ final class ImapService
     }
 
     /**
+     * Inbox messages with a uid above $afterUid (oldest first), with decoded addresses and the raw
+     * header, for rules and out-of-office replies. $afterUid = null: the last $limit messages.
+     * @return array<int, array{uid:int, subject:string, from:?array, to:array, cc:array, message_id:?string, raw:string}>
+     */
+    public function arrivals(?int $afterUid, int $limit = 200): array
+    {
+        $folder = $this->folder('INBOX');
+        $this->client->openFolder($folder->path, true);
+        $conn = $this->client->getConnection();
+        $found = $conn->search($afterUid === null ? ['ALL'] : ['UID', ($afterUid + 1) . ':*'], IMAP::ST_UID)->validatedData();
+        $uids = array_map('intval', is_array($found) ? $found : []);
+        if ($afterUid !== null) {
+            $uids = array_values(array_filter($uids, static fn ($u) => $u > $afterUid));
+        }
+        sort($uids);
+        $uids = $afterUid === null ? array_slice($uids, -$limit) : array_slice($uids, 0, $limit);
+        if ($uids === []) {
+            return [];
+        }
+        $headers = $conn->headers($uids, 'RFC822', IMAP::ST_UID)->validatedData();
+        $out = [];
+        foreach ($uids as $uid) {
+            if (!isset($headers[$uid])) {
+                continue;
+            }
+            $raw = (string) $headers[$uid];
+            $m = $this->summaryFromHeader($uid, $raw, [], 'INBOX');
+            $cc = [];
+            try {
+                $cc = self::addresses((new Header($raw, $this->client->getConfig()))->get('cc'));
+            } catch (Throwable) {
+            }
+            $out[] = ['uid' => $uid, 'subject' => $m['subject'], 'from' => $m['from'], 'to' => $m['to'], 'cc' => $cc, 'date' => $m['date'], 'message_id' => $m['message_id'], 'raw' => $raw];
+        }
+        return $out;
+    }
+
+    /**
      * Unread inbox messages with a uid above $afterUid, newest first (call inboxState() first).
      * @return array{total:int, messages:array}
      */
@@ -695,17 +733,77 @@ final class ImapService
         $this->searchInBody = $on;
     }
 
-    /** IMAP search criteria: everything, or the text in sender, recipient, subject (and body). */
+    /** Only messages with this label (IMAP keyword). */
+    private ?string $keyword = null;
+
+    public function setKeywordFilter(?string $keyword): void
+    {
+        $this->keyword = $keyword !== null && self::validKeyword($keyword) ? $keyword : null;
+    }
+
+    /** IMAP search criteria: everything, or the text in sender, recipient, subject (and body); optionally one label. */
     private function searchCriteria(?string $search): array
     {
+        $label = $this->keyword !== null ? ['KEYWORD', $this->keyword] : [];
         $search = trim((string) $search);
         if ($search === '') {
-            return ['ALL'];
+            return $label ?: ['ALL'];
         }
         $q = $this->imapString($search);
-        return $this->searchInBody
+        return [...$label, ...($this->searchInBody
             ? ['OR', 'OR', 'OR', 'FROM', $q, 'TO', $q, 'SUBJECT', $q, 'BODY', $q]
-            : ['OR', 'OR', 'FROM', $q, 'TO', $q, 'SUBJECT', $q];
+            : ['OR', 'OR', 'FROM', $q, 'TO', $q, 'SUBJECT', $q])];
+    }
+
+    /** IMAP keywords that are not labels (set by mail programs for their own bookkeeping). */
+    private const SYSTEM_KEYWORDS = ['$forwarded', '$mdnsent', '$junk', '$notjunk', 'junk', 'nonjunk', 'notjunk', '$phishing', '$submitpending', '$submitted', '$hasattachment', '$hasnoattachment', '$answered', '$notphishing', '$autojunk', '$hastd'];
+
+    /** Labels of a message: its keywords, without the system ones. @return string[] */
+    public static function labelsFrom(array $rawFlags): array
+    {
+        $out = [];
+        array_walk_recursive($rawFlags, static function ($f) use (&$out) {
+            $f = (string) $f;
+            if ($f === '' || $f[0] === '\\' || str_starts_with(strtolower($f), '$mailflagbit') || in_array(strtolower($f), self::SYSTEM_KEYWORDS, true)) {
+                return;
+            }
+            $out[] = strtolower($f);
+        });
+        return array_values(array_unique($out));
+    }
+
+    /** Labels of one message (the library's flag list leaves keywords out). @return string[] */
+    public function labelsOf(string $folderPath, int $uid): array
+    {
+        $folder = $this->folder($folderPath);
+        $this->client->openFolder($folder->path, true);
+        $flags = $this->client->getConnection()->flags([$uid], IMAP::ST_UID)->validatedData();
+        return self::labelsFrom((array) ($flags[$uid] ?? []));
+    }
+
+    public static function validKeyword(string $k): bool
+    {
+        return (bool) preg_match('/^\$?[A-Za-z0-9_.-]{1,40}$/', $k);
+    }
+
+    /**
+     * Add and remove labels (IMAP keywords).
+     * @param int[] $uids @param string[] $add @param string[] $remove
+     */
+    public function setLabels(string $folderPath, array $uids, array $add, array $remove): void
+    {
+        $folder = $this->folder($folderPath);
+        $this->client->openFolder($folder->path, true);
+        $conn = $this->client->getConnection();
+        foreach ([['+', $add], ['-', $remove]] as [$mode, $keywords]) {
+            $keywords = array_values(array_filter($keywords, [self::class, 'validKeyword']));
+            if ($keywords === [] || $uids === []) {
+                continue;
+            }
+            foreach ($uids as $uid) {
+                $conn->store($keywords, (int) $uid, null, $mode, true, IMAP::ST_UID);
+            }
+        }
     }
 
     /** Quoted string for plain ASCII, literal {n} for anything else (UTF-8). */
@@ -758,6 +856,7 @@ final class ImapService
             'seen'            => isset($flags['seen']),
             'flagged'         => isset($flags['flagged']),
             'answered'        => isset($flags['answered']),
+            'labels'          => self::labelsFrom($rawFlags),
             // Without fetching the body, multipart/mixed is a good indication of attachments.
             'has_attachments' => str_contains($contentType, 'multipart/mixed'),
         ];

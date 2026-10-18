@@ -3,11 +3,16 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import AppIcon from './AppIcon.vue'
 import MessageRow from './MessageRow.vue'
 import FolderPicker from './FolderPicker.vue'
+import LabelMenu from './LabelMenu.vue'
+import { useSession } from '../stores/session.js'
+import { labelName, labelMap } from '../labels.js'
 import { useMail, msgKey } from '../stores/mail.js'
 import { useToasts } from '../stores/toasts.js'
 import { t } from '../i18n/index.js'
 
 const props = defineProps({ title: { type: String, default: '' } })
+const session = useSession()
+const activeLabel = computed(() => (mail.labelFilter ? labelMap(session.settings)[mail.labelFilter.toLowerCase()] : null))
 const emit = defineEmits(['open', 'menu', 'shortcuts'])
 
 const mail = useMail()
@@ -158,6 +163,7 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
         <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.flag')" @click="mail.bulk('flag')">
           <AppIcon name="flag" />
         </button>
+        <LabelMenu v-if="session.settings.labels?.length" :messages="mail.selectedMessages" />
         <button v-if="mail.folderRole === 'snoozed'" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.unsnooze')" @click="mail.bulk('unsnooze')">
           <AppIcon name="inbox" />
         </button>
@@ -241,6 +247,14 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
         >{{ t('list.searchBody') }}</button>
       </template>
     </header>
+    <!-- Label filter -->
+    <div v-if="mail.labelFilter" class="flex items-center gap-2 border-b border-line px-4 py-2 text-sm">
+      <span class="text-muted">{{ t('labels.filtered') }}</span>
+      <span class="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-medium" :style="{ background: (activeLabel?.color ?? '#677385') + '22', color: activeLabel?.color }">
+        <span class="size-2 rounded-full" :style="{ background: activeLabel?.color }" />{{ activeLabel ? labelName(activeLabel) : mail.labelFilter }}
+      </span>
+      <button class="ml-auto rounded-lg px-2 py-1 text-muted hover:bg-sunken hover:text-ink" @click="mail.filterLabel(null)">{{ t('labels.clearFilter') }}</button>
+    </div>
 
     <div
       ref="scroller"

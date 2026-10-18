@@ -62,7 +62,11 @@
 
 - [x] 1.2: contacts sync with phones (CardDAV), calendar invitations (.ics) in the reader with accept/decline,
       calendars from elsewhere (iCal address) and share links
-- [ ] 1.3: filters and out-of-office (Sieve, where the server supports it), reply templates
+- [x] 1.3: rules (filters) and out-of-office replies, run by Postvak's cron job (works without Sieve), reply templates
+
+## 1.4: business touches
+
+- [x] Signature with logo (inline image), labels (IMAP keywords, Thunderbird-compatible), accent colours and text size
 
 ## Ideas after 1.0
 

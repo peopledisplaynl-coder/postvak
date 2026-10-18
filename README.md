@@ -32,7 +32,13 @@ on your phone (PWA). No Node.js, no daemons, no SSH needed on the server.
 **Writing**
 - Rich text editor (headings, lists, links, colours, clean paste from Word), the quoted original kept intact.
 - Drafts saved automatically, send later, undo send, address autocomplete from a contacts list.
-- Send from any of your accounts, each with its own signature.
+- Send from any of your accounts, each with its own signature (with a logo, sent as an embedded image); reusable templates.
+- Coloured labels (shared with Thunderbird), filter a folder on a label.
+
+**Sorting and away**
+- Rules for new mail: move, mark as read, star or delete by sender, recipient or subject; make one from a message.
+- Out-of-office reply with start and end date, at most once per sender, never to mailing lists or automatic mail.
+  Both run from the cron job, so they work with any mail server.
 
 **Calendar and tasks**
 - Month, week, day and list view; repeating events, reminders as push notifications.
@@ -49,7 +55,7 @@ on your phone (PWA). No Node.js, no daemons, no SSH needed on the server.
 - Optional two-step verification (TOTP) with recovery codes and remembered devices.
 - Privacy by default: remote images blocked until you allow them (per message, sender or domain), mail HTML
   sanitised on the server and again in the browser, shown in a sandboxed frame.
-- Light and dark theme, keyboard shortcuts (press `?`), Dutch and English interface.
+- Light and dark theme, 8 accent colours, three text sizes, keyboard shortcuts (press `?`), Dutch and English interface.
 - Admin page: users, login attempts and blocks, allowed domains, default settings, background job status.
 
 ## How it works

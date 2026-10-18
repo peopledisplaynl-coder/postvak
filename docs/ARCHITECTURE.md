@@ -147,6 +147,34 @@ users, linked accounts, preferences and contacts.
 - "Make a task" in the reader stores a link back to the message (`X-POSTVAK-MAIL`: account, folder, UID, subject,
   sender), so the task can open the mail again as long as it was not moved.
 
+## Labels, appearance, signature images
+
+- **Labels** are IMAP keywords. The defaults are Thunderbird's `$label1` … `$label5` (Important, Work, Personal,
+  To do, Later), so they are shared with Thunderbird; own labels get a keyword `pv_<name>`. Definitions (name, colour)
+  are a user setting (`labels`). Summaries carry `labels` (keywords without system ones such as `$Forwarded`); the
+  reader fetches them with a raw FLAGS (the IMAP library drops keywords). `?label=` filters a folder list with
+  `SEARCH KEYWORD`. Rules can set a label.
+- **Appearance**: settings `accent` (8 colours, CSS variables per `html[data-accent]`, light and dark) and `text_size`
+  (html font size, so everything in rem scales).
+- **Signature images** (`signature_images`, migration 012): the browser scales a logo to at most 360 × 180 and uploads
+  it; the signature refers to `/api/signature-images/<token>` (only for its owner). `SmtpService` turns those into
+  inline `cid:` attachments when a mail is built, so recipients see the logo without loading remote images.
+
+## Rules, out-of-office replies, templates
+
+- Shared hosting offers no delivery hooks and often no ManageSieve, so rules and out-of-office replies run in
+  Postvak itself: `Mail\MailProcessor` (from cron, before the new-mail notifier) looks at what arrived in each
+  INBOX since the last run (`mail_processing`: uidvalidity + last uid; the first run only sets the starting point).
+- `Mail\RuleEngine` is pure logic: conditions on sender, recipient (To/Cc), subject or any of those (contains, does
+  not contain, is, starts with, ends with; all or any), actions move / trash / mark read / star. Rules are tried in
+  order; flags add up, the first move or trash wins. "Apply now" runs them over the last 500 inbox messages.
+- Snoozed mail that returns to the inbox is skipped by rules (`MailProcessor::skipReturned`).
+- `Mail\AutoReply` follows RFC 3834: no reply to mailing lists (List-*), bulk/junk precedence, Auto-Submitted mail,
+  no-reply/daemon addresses, your own addresses, mail not addressed to the account (To/Cc), or mail older than two
+  days; at most one reply per sender per 4 days (`autoreply_log`, sender hashed). Replies carry
+  `Auto-Submitted: auto-replied`.
+- Templates (`mail_templates`) are HTML snippets per user, inserted at the cursor in the composer.
+
 ## Contacts over CardDAV
 
 - `Dav\AddressBookBackend` serves one address book "Postvak" per user (`addressbooks/<login>/contacts/`) straight from
@@ -232,6 +260,17 @@ All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` b
 | POST / DELETE | `/calendars/{id}/share` | Make (or replace) / revoke the secret .ics link of a calendar; `GET /calendars` returns it as `share_url` |
 | GET | `/ical/{token}.ics` | Public: the shared calendar as iCalendar |
 | POST | `/accounts/{id}/messages/{uid}/invitation` | `{folder, response: accepted\|tentative\|declined\|remove, reply?, calendar_id?}`; the message itself returns `invitation` (method, title, times, organizer, `in_calendar`, `calendar_status`) |
+| GET / POST | `/rules` | Rules of the user / create `{name, account_id?, enabled, match_all, conditions: [{field, op, value}], actions: {move?, trash?, read?, flag?}}` |
+| PUT / PATCH / DELETE | `/rules/{id}` | Replace / `{enabled}` only / remove |
+| POST | `/rules/order` | `{ids}` in the new order |
+| POST | `/rules/apply` | `{rule_id?}`: run on the last 500 inbox messages now → `{messages, matched}` |
+| GET | `/autoreplies` | Out-of-office settings per account (with `active`) |
+| PUT | `/autoreplies/{accountId}` | `{enabled, starts_on?, ends_on?, subject, body, contacts_only}` |
+| GET / POST | `/templates` | Reply templates / create `{name, subject?, html}` |
+| PUT / DELETE | `/templates/{id}` | Change / remove |
+| POST | `/accounts/{id}/labels` | `{folder, uids, add?: [keyword], remove?: [keyword]}`; list endpoints take `label=` |
+| POST | `/signature-images` | multipart `file` (PNG/JPEG/GIF/WebP, max 300 kB) → `{url}` |
+| GET | `/signature-images/{token}` | The image (owner only) |
 | GET | `/health` | Version check |
 
 ## Admin

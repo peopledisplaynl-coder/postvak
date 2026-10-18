@@ -30,8 +30,10 @@ final class CronRunner
         $results = [];
         try {
             Migrator::runQuietly();
-            // Order matters: snoozed mail returns to the inbox before the new-mail check announces it.
+            // Order matters: rules sort new mail first, then snoozed mail returns to the inbox (rules skip it),
+            // then the new-mail check announces what is still in the inbox.
             $results['scheduled'] = self::task('scheduled', static fn () => (new \Postvak\Mail\Scheduler())->runDue($log), $log);
+            $results['rules'] = self::task('rules', static fn () => (new \Postvak\Mail\MailProcessor())->run($log), $log);
             $results['snoozes'] = self::task('snoozes', static fn () => (new \Postvak\Mail\Snoozer())->runDue($log), $log);
             $results['notifications'] = self::task('notifications', static fn () => (new NewMailNotifier())->run($log), $log);
             $results['reminders'] = self::task('reminders', static fn () => (new AlarmNotifier())->run($log), $log);

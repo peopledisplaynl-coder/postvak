@@ -99,6 +99,8 @@ export const useSession = defineStore('session', {
       const theme = this.settings.theme ?? 'system'
       const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
       document.documentElement.classList.toggle('dark', dark)
+      document.documentElement.dataset.accent = this.settings.accent ?? 'indigo'
+      document.documentElement.dataset.textSize = this.settings.text_size ?? 'normal'
     },
   },
 })

@@ -7,7 +7,7 @@ Read `docs/ARCHITECTURE.md` and `docs/ROADMAP.md` before larger changes.
 
 - Production host is shared hosting with **FTP only**: no SSH, no Node on the server, no long-running
   processes, no IMAP IDLE. Deploy with `npm run deploy`.
-- Background work (push notifications, scheduled sending, snooze) runs only from `backend/cron.php`
+- Background work (push notifications, rules, out-of-office replies, scheduled sending, snooze, calendar feeds) runs only from `backend/cron.php`
   via the host's cron (`Cron\CronRunner`); never assume a daemon or queue worker.
 - Calendar and tasks live in sabre/dav's tables (`dav_*`); the web UI goes through `Calendar\CalendarService`
   (iCalendar via sabre/vobject) so phones syncing over CalDAV (`/dav/`, app passwords) see the same data.

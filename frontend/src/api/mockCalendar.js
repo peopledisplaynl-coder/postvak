@@ -91,7 +91,7 @@ export function createCalendarMock(nl) {
 
   return function handle(method, path, { body = {}, query = {} }) {
     const idOf = () => Number(path.split('/')[2])
-    if (path === '/calendars' && method === 'GET') return structuredClone(calendars)
+    if (path === '/calendars' && method === 'GET') return JSON.parse(JSON.stringify(calendars))
     if (path === '/calendars' && method === 'POST') {
       const cal = { id: nextId++, name: body.name, color: body.color, type: body.type, order: calendars.length, writable: true }
       calendars.push(cal)

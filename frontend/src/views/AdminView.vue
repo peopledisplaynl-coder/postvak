@@ -145,7 +145,7 @@ const cronOk = computed(() => !!overview.value?.cron && Date.parse(overview.valu
       </button>
     </header>
 
-    <nav class="flex gap-1 no-scrollbar overflow-x-auto px-4" role="tablist">
+    <nav class="flex flex-wrap gap-1 gap-y-1.5 px-4" role="tablist">
       <router-link
         v-for="name in tabs"
         :key="name"

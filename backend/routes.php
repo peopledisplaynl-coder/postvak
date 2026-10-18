@@ -9,6 +9,8 @@ use Postvak\Controllers\CalendarController;
 use Postvak\Controllers\ContactController;
 use Postvak\Controllers\MailController;
 use Postvak\Controllers\PushController;
+use Postvak\Controllers\RuleController;
+use Postvak\Controllers\SignatureImageController;
 use Postvak\Controllers\TwoFactorController;
 use Postvak\Controllers\SettingsController;
 use Postvak\Http\Router;
@@ -53,6 +55,7 @@ $router->get('/accounts/{id}/messages/{uid}/attachments/{index}', [$mail, 'attac
 $router->get('/accounts/{id}/messages/{uid}/conversation', [$mail, 'conversation']);
 $router->post('/accounts/{id}/move', [$mail, 'move']);
 $router->post('/accounts/{id}/flags', [$mail, 'flags']);
+$router->post('/accounts/{id}/labels', [$mail, 'labels']);
 $router->post('/accounts/{id}/send', [$mail, 'send']);
 $router->post('/accounts/{id}/drafts', [$mail, 'saveDraft']);
 $router->delete('/accounts/{id}/drafts/{uid}', [$mail, 'deleteDraft']);
@@ -108,6 +111,26 @@ $router->get('/admin/security', [$admin, 'security']);
 $router->post('/admin/security/release', [$admin, 'release']);
 $router->get('/admin/settings', [$admin, 'settings']);
 $router->patch('/admin/settings', [$admin, 'updateSettings']);
+
+// Rules, out-of-office replies, templates
+$rules = new RuleController();
+$router->get('/rules', [$rules, 'index']);
+$router->post('/rules', [$rules, 'store']);
+$router->post('/rules/order', [$rules, 'order']);
+$router->post('/rules/apply', [$rules, 'apply']);
+$router->put('/rules/{id}', [$rules, 'update']);
+$router->patch('/rules/{id}', [$rules, 'update']);
+$router->delete('/rules/{id}', [$rules, 'destroy']);
+$router->get('/autoreplies', [$rules, 'autoreplies']);
+$router->put('/autoreplies/{id}', [$rules, 'saveAutoreply']);
+$router->get('/templates', [$rules, 'templates']);
+$router->post('/templates', [$rules, 'storeTemplate']);
+$router->put('/templates/{id}', [$rules, 'updateTemplate']);
+$router->delete('/templates/{id}', [$rules, 'destroyTemplate']);
+
+$signatureImages = new SignatureImageController();
+$router->post('/signature-images', [$signatureImages, 'store']);
+$router->get('/signature-images/{token}', [$signatureImages, 'show']);
 
 $router->get('/health', static fn () => \Postvak\Http\Response::json(['ok' => true, 'version' => POSTVAK_VERSION]));
 

@@ -208,6 +208,15 @@ defineExpose({ message, reload: load, print: printMessage })
           </p>
           <p class="text-muted">{{ fullDate(message.date) }}</p>
         </div>
+        <RouterLink
+          v-if="senderEmail && !ownAddress"
+          :to="{ path: '/settings/rules', query: { from: senderEmail, name: displayName(message.from), account: target.account_id } }"
+          class="shrink-0 rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink"
+          :title="t('rules.fromMessage')"
+          @click.stop
+        >
+          <AppIcon name="filter" :size="20" />
+        </RouterLink>
         <button
           v-if="senderEmail && !ownAddress"
           class="shrink-0 rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink disabled:opacity-50"

@@ -234,7 +234,7 @@ const countLabel = computed(() => (visible.value.length === 1 ? t('contacts.coun
           class="w-full rounded-lg bg-sunken px-3 py-2 outline-none placeholder:text-muted"
           :placeholder="t('contacts.search')"
         />
-        <div class="flex gap-1.5 no-scrollbar overflow-x-auto" role="tablist">
+        <div class="flex flex-wrap gap-1.5" role="tablist">
           <button
             v-for="f in ['saved', 'favorites', 'all']"
             :key="f"

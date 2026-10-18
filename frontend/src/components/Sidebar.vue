@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import SidebarLabels from './SidebarLabels.vue'
 import AppIcon from './AppIcon.vue'
 import { useSession } from '../stores/session.js'
 import { useMail, ALL } from '../stores/mail.js'
@@ -90,6 +91,7 @@ function go(accountId, path = 'INBOX') {
           <span v-if="folder?.unseen" class="text-sm text-muted tabular-nums">{{ folder.unseen }}</span>
         </button>
       </li>
+      <SidebarLabels @picked="emit('navigate', null)" />
     </ul>
 
     <!-- Folders of the active account (or of the dragged messages' account) -->
@@ -118,6 +120,7 @@ function go(accountId, path = 'INBOX') {
           </span>
         </button>
       </li>
+      <SidebarLabels v-if="!dropAccountId" @picked="emit('navigate', null)" />
     </ul>
 
     <router-link

@@ -67,7 +67,8 @@ function go(accountId, path = 'INBOX') {
     </div>
 
     <!-- Accounts -->
-    <div v-if="session.accounts.length > 1" class="flex flex-wrap gap-1.5 px-3 pb-2">
+    <!-- In the unified inbox the list below already shows every account (with unread count). -->
+    <div v-if="session.accounts.length > 1 && !mail.unified" class="flex flex-wrap gap-1.5 px-3 pb-2">
       <button
         v-for="a in session.accounts"
         :key="a.id"
@@ -80,7 +81,7 @@ function go(accountId, path = 'INBOX') {
         {{ a.display_name || a.email.split('@')[0] }}
       </button>
     </div>
-    <p v-else class="truncate px-6 pb-2 text-sm text-muted">{{ session.accounts[0]?.email }}</p>
+    <p v-else-if="session.accounts.length <= 1" class="truncate px-6 pb-2 text-sm text-muted">{{ session.accounts[0]?.email }}</p>
 
     <!-- Unified: inbox per account -->
     <ul v-if="mail.unified && !dropAccountId" class="min-h-0 flex-1 overflow-y-auto px-2">

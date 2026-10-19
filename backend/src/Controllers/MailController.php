@@ -48,7 +48,7 @@ final class MailController
         $userId = Auth::requireUser();
         session_write_close();
         $page = max(1, (int) $r->query('page', 1));
-        $perPage = min(100, max(10, (int) $r->query('per_page', 50)));
+        $perPage = min(100, max(5, (int) $r->query('per_page', 50)));
         $q = trim((string) $r->query('q', ''));
         $sort = (string) $r->query('sort', 'date_desc');
         if (!in_array($sort, ['date_desc', 'date_asc', 'from', 'subject'], true)) {
@@ -67,6 +67,7 @@ final class MailController
                 $imap = new ImapService($account);
                 $imap->setSearchInBody($r->query('body') === '1');
                 $imap->setKeywordFilter($r->query('label') ?: null);
+                $imap->setFilters($r->query('filter'), $r->query('since'), $r->query('from'));
                 $cache = new SnippetCache((int) $account['id']);
                 $list = $threads
                     ? $imap->listThreads('INBOX', 1, $need, $q === '' ? null : $q, $cache)
@@ -137,7 +138,7 @@ final class MailController
     {
         [$account, $imap] = $this->open($r);
         $page = max(1, (int) $r->query('page', 1));
-        $perPage = min(100, max(10, (int) $r->query('per_page', 50)));
+        $perPage = min(100, max(5, (int) $r->query('per_page', 50)));
         $q = trim((string) $r->query('q', ''));
         $sort = (string) $r->query('sort', 'date_desc');
 
@@ -145,6 +146,7 @@ final class MailController
         $folder = $this->folderParam($r);
         $imap->setSearchInBody($r->query('body') === '1');
         $imap->setKeywordFilter($r->query('label') ?: null);
+        $imap->setFilters($r->query('filter'), $r->query('since'), $r->query('from'));
         // threads=1: one row per conversation (only in date order, like Gmail).
         $list = $r->query('threads') === '1' && $sort === 'date_desc'
             ? $imap->listThreads($folder, $page, $perPage, $q === '' ? null : $q, $cache)

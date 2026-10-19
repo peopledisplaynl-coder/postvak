@@ -7,6 +7,8 @@ import { appState, checkForUpdate, applyUpdate } from '../appUpdate.js'
 import CalendarSettings from '../components/CalendarSettings.vue'
 import RulesSettings from '../components/RulesSettings.vue'
 import AppearanceSettings from '../components/AppearanceSettings.vue'
+import AboutSettings from '../components/AboutSettings.vue'
+import SharedFilesSettings from '../components/SharedFilesSettings.vue'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
 import { api } from '../api/client.js'
@@ -21,7 +23,7 @@ const session = useSession()
 const toasts = useToasts()
 const mail = useMail()
 
-const tabs = ['general', 'appearance', 'swipe', 'notifications', 'rules', 'calendar', 'privacy', 'security', 'folders', 'accounts']
+const tabs = ['general', 'appearance', 'swipe', 'notifications', 'rules', 'calendar', 'privacy', 'security', 'folders', 'accounts', 'about']
 const tab = computed(() => (tabs.includes(route.params.tab) ? route.params.tab : 'general'))
 const editing = ref(null) // account id, 'new' or null
 
@@ -34,12 +36,9 @@ const serverVersion = ref(null)
 api.get('/health').then((h) => (serverVersion.value = h?.version ?? null)).catch(() => {})
 
 async function checkUpdates() {
-  const waiting = await checkForUpdate()
-  const health = await api.get('/health').catch(() => null)
-  serverVersion.value = health?.version ?? serverVersion.value
-  if (waiting || (serverVersion.value && serverVersion.value !== appVersion)) {
+  if (await checkForUpdate()) {
     toasts.show(t('update.loading'))
-    setTimeout(() => (waiting ? applyUpdate() : location.reload()), 600)
+    setTimeout(applyUpdate, 600)
   } else {
     toasts.show(t('update.upToDate'))
   }
@@ -317,7 +316,7 @@ async function logout() {
 }
 
 const pollOptions = [30, 60, 120, 300, 600]
-const pageSizeOptions = [10, 15, 25, 50, 100]
+const pageSizeOptions = [5, 10, 15, 25, 50, 100]
 const pageSizeDevices = computed(() => [
   { key: 'page_size_mobile', label: 'settings.pageSizeMobile', fallback: 25, current: isSmallDevice() },
   { key: 'page_size', label: 'settings.pageSizeDesktop', fallback: 50, current: !isSmallDevice() },
@@ -563,6 +562,7 @@ const pageSizeDevices = computed(() => [
           </ul>
           <p v-else class="mt-3 text-sm text-muted">{{ t('settings.trustedEmpty') }}</p>
         </section>
+        <SharedFilesSettings />
       </div>
 
       <!-- Security: two-factor authentication -->
@@ -658,6 +658,7 @@ const pageSizeDevices = computed(() => [
       <CalendarSettings v-else-if="tab === 'calendar'" />
       <RulesSettings v-else-if="tab === 'rules'" />
       <AppearanceSettings v-else-if="tab === 'appearance'" />
+      <AboutSettings v-else-if="tab === 'about'" />
 
       <!-- Folders -->
       <div v-else-if="tab === 'folders'" class="space-y-4">

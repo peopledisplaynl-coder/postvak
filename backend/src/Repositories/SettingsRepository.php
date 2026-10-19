@@ -65,8 +65,8 @@ final class SettingsRepository
         'language'          => ['enum', ['auto', 'nl', 'en']],
         'accent'            => ['enum', self::ACCENTS],
         'text_size'         => ['enum', ['small', 'normal', 'large']],
-        'page_size'         => ['int', 10, 100],
-        'page_size_mobile'  => ['int', 10, 100],
+        'page_size'         => ['int', 5, 100],
+        'page_size_mobile'  => ['int', 5, 100],
         'labels'            => ['labels'],
     ];
 

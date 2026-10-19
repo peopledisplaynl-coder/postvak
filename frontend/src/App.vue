@@ -1,5 +1,6 @@
 <script setup>
 import ToastHost from './components/ToastHost.vue'
+import UpdateBar from './components/UpdateBar.vue'
 
 // A file dropped outside a drop zone would make the browser open it and leave the app.
 const isFileDrag = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
@@ -14,4 +15,5 @@ window.addEventListener('drop', (e) => { if (isFileDrag(e) && !e.defaultPrevente
 <template>
   <RouterView />
   <ToastHost />
+  <UpdateBar />
 </template>

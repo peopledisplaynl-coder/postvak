@@ -38,6 +38,7 @@ final class CronRunner
             $results['notifications'] = self::task('notifications', static fn () => (new NewMailNotifier())->run($log), $log);
             $results['reminders'] = self::task('reminders', static fn () => (new AlarmNotifier())->run($log), $log);
             $results['feeds'] = self::task('feeds', static fn () => (new \Postvak\Calendar\FeedService())->refreshDue($log), $log);
+            $results['files'] = self::task('files', static fn () => (new \Postvak\Files\SharedFiles())->cleanup(), $log);
             $results['sessions'] = self::task('sessions', static fn () => ['removed' => \Postvak\Auth::cleanSessions()], $log);
         } finally {
             $summary = ['at' => date(DATE_ATOM), 'took_ms' => (int) ((microtime(true) - $started) * 1000), 'results' => $results];

@@ -73,10 +73,10 @@ function closeMessage() {
   router.push({ query: rest })
 }
 
-function compose(mode = 'new', message = null) {
+function compose(mode = 'new', message = null, extra = {}) {
   // Reply from the account the message belongs to; new mail from the open account.
   const from = message?.account_id ?? (mail.unified ? session.loginAccount?.id : mail.accountId)
-  draft.value = { accountId: from, mode, message }
+  draft.value = { accountId: from, mode, message, ...extra }
 }
 
 // ?compose=jan@x.nl&name=Jan opens the composer (link from the contacts page).
@@ -257,7 +257,7 @@ const layoutStyle = computed(() => ({
 
     <!-- Reader -->
     <div class="min-w-0 flex-1" :class="uid ? 'block' : 'hidden md:block'">
-      <MessageView :target="target" @back="closeMessage" @reply="({ mode, message }) => compose(mode, message)" @edit-draft="editDraft" />
+      <MessageView :target="target" @back="closeMessage" @reply="({ mode, message, text, send }) => compose(mode, message, { text, send })" @edit-draft="editDraft" />
     </div>
 
     <!-- Floating compose button on phones and tablets -->

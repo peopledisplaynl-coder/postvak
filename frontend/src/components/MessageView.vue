@@ -6,6 +6,7 @@ import { labelsOfMessage, labelName } from '../labels.js'
 import AppIcon from './AppIcon.vue'
 import FolderPicker from './FolderPicker.vue'
 import MessageBody from './MessageBody.vue'
+import QuickReply from './QuickReply.vue'
 import { useMail } from '../stores/mail.js'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
@@ -104,7 +105,14 @@ function markConversationRead(list) {
 
 /** Single message loaded: mark it read (like before). */
 const loaded = ref(null) // the open message as the reader loaded it (single message)
-watch(targetKey, () => (loaded.value = null))
+const newestLoaded = ref(null) // newest message of a conversation, once its card has loaded
+watch(targetKey, () => { loaded.value = null; newestLoaded.value = null })
+/** The message a quick reply answers: the newest one of the conversation, or the single message. */
+const replyTarget = computed(() => (isConversation.value ? newestLoaded.value : loaded.value))
+function onItemLoaded(m, data) {
+  const list = items.value
+  if (list.length && itemKey(list[list.length - 1]) === itemKey(m)) newestLoaded.value = data
+}
 const readerLabels = computed(() => labelsOfMessage(session.settings, loaded.value ?? summary.value))
 
 function onSingleLoaded(data) {
@@ -272,6 +280,7 @@ function reply(payload) {
                 collapsible
                 :badge="row.m.folder === sentPath && row.m.folder !== target.folder ? t('folders.sent') : ''"
                 @collapse="toggle(row.m)"
+                @loaded="(d) => onItemLoaded(row.m, d)"
                 @reply="reply"
               />
             </div>
@@ -293,7 +302,9 @@ function reply(payload) {
         </ol>
 
         <!-- Single message -->
-        <MessageBody v-else class="mt-4 pb-8" :target="target" @loaded="onSingleLoaded" @reply="reply" />
+        <MessageBody v-else class="mt-4" :target="target" @loaded="onSingleLoaded" @reply="reply" />
+
+        <QuickReply v-if="replyTarget && mail.folderRole !== 'drafts'" :message="replyTarget" class="mb-8" @reply="reply" />
       </div>
     </article>
 

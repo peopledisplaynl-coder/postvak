@@ -4,6 +4,7 @@ import { api } from '../api/client.js'
 import { t, locale } from '../i18n/index.js'
 import { useSession } from './session.js'
 import { useToasts } from './toasts.js'
+import { labelName, labelMap } from '../labels.js'
 
 /** Phones and tablets (small screen or touch) can load fewer messages per page than a computer. */
 export function isSmallDevice() {
@@ -13,7 +14,7 @@ export function isSmallDevice() {
 /** How many messages one page of the list holds (settings "page_size" / "page_size_mobile"). */
 export function pageSize(settings = useSession().settings) {
   const n = Number(isSmallDevice() ? settings.page_size_mobile ?? 25 : settings.page_size ?? 50)
-  return Math.min(100, Math.max(10, Number.isFinite(n) ? n : 50))
+  return Math.min(100, Math.max(5, Number.isFinite(n) ? n : 50))
 }
 
 /** The id "all" stands for the unified inbox (the inboxes of every account). */
@@ -26,6 +27,18 @@ export const msgKey = (m) => `${m.account_id}:${m.uid}`
  * Messages of the old list that come after the refreshed first page (so a refresh does not throw away what was
  * scrolled in). Null when the first page no longer overlaps the old list (then the list starts over).
  */
+export const noFilters = () => ({ unseen: false, flagged: false, attachment: false, since: 0, from: '' })
+
+/** Search filters as query parameters for the list API. */
+export function filterQuery(f) {
+  const flags = ['unseen', 'flagged', 'attachment'].filter((k) => f[k])
+  return {
+    filter: flags.length ? flags.join(',') : undefined,
+    since: f.since ? f.since : undefined,
+    from: f.from ? f.from : undefined,
+  }
+}
+
 export function olderThan(old, fresh) {
   if (!fresh.length) return null
   const freshKeys = new Set(fresh.map(msgKey))
@@ -78,6 +91,7 @@ export const useMail = defineStore('mail', {
     drag: null,           // { messages, accountId } while messages are dragged (accountId null = mixed)
     snoozeRequest: null,  // messages waiting for a snooze time (the picker is shown by MailView)
     labelFilter: null,    // only messages with this label (IMAP keyword) in the current folder
+    filters: noFilters(), // search filters: unread, starred, with attachment, period, sender
   }),
 
   getters: {
@@ -87,6 +101,7 @@ export const useMail = defineStore('mail', {
       return this.currentFolders.find((f) => f.path === s.folderPath)
     },
     hasMore: (s) => s.messages.length < s.total,
+    filtersActive: (s) => Object.entries(s.filters).some(([k, v]) => v && v !== noFilters()[k]),
     folderRole() {
       return this.unified ? 'inbox' : this.currentFolder?.role ?? null
     },
@@ -129,12 +144,36 @@ export const useMail = defineStore('mail', {
       }))
     },
 
+    /** Identifies what the list shows, so an answer for an older request can be ignored. */
+    listKey() {
+      return `${this.accountId}:${this.folderPath}:${this.search}:${this.labelFilter}:${JSON.stringify(this.filters)}`
+    },
+
+    setFilter(key, value) {
+      this.filters = { ...this.filters, [key]: value }
+      return this.loadMessages()
+    },
+
+    clearFilters() {
+      if (!this.filtersActive) return
+      this.filters = noFilters()
+      return this.loadMessages()
+    },
+
+    /** "More from this sender": search the current folder (or all inboxes) for one address. */
+    searchFrom(email) {
+      this.search = ''
+      this.filters = { ...noFilters(), from: email }
+      return this.loadMessages()
+    },
+
     listRequest(page) {
       const query = {
         page, per_page: this.perPage, q: this.search, sort: this.sort,
         threads: this.wantThreads ? 1 : undefined,
         body: this.search && this.searchBody ? 1 : undefined,
         label: this.labelFilter || undefined,
+        ...filterQuery(this.filters),
       }
       return this.unified
         ? api.get('/unified/messages', query)
@@ -143,14 +182,14 @@ export const useMail = defineStore('mail', {
 
     async loadMessages({ silent = false, restart = false } = {}) {
       if (!silent) this.loading = true
-      const requested = `${this.accountId}:${this.folderPath}:${this.search}:${this.labelFilter}`
+      const requested = this.listKey()
       try {
         // A silent refresh (polling) keeps the page size and the messages scrolled in so far.
         const keep = silent && !restart && this.page > 1
         if (!keep) this.perPage = pageSize()
         const data = await this.listRequest(1)
         // Ignore the answer if the user switched folder in the meantime.
-        if (requested !== `${this.accountId}:${this.folderPath}:${this.search}:${this.labelFilter}`) return
+        if (requested !== this.listKey()) return
         // Do not resurrect messages that are waiting to be archived/deleted/moved.
         const fresh = (data?.messages ?? []).filter((m) => !this.pending.has(pendingKey(m)))
         const rest = keep ? olderThan(this.messages, fresh) : null
@@ -355,7 +394,7 @@ export const useMail = defineStore('mail', {
       const flag = action === 'read' ? 'seen' : 'flagged'
       // Mark all as read unless they already are; same for the star.
       const value = !messages.every((m) => m[flag])
-      await this.setFlagMany(messages, flag, value)
+      await this.setFlagMany(messages, flag, value, { undo: true })
       this.clearSelection()
     },
 
@@ -364,8 +403,10 @@ export const useMail = defineStore('mail', {
     },
 
     /** Set a flag on messages; on a conversation row it applies to every message in it. */
-    async setFlagMany(messages, flag, value) {
+    async setFlagMany(messages, flag, value, { undo = false } = {}) {
       const before = messages.map((m) => ({ value: m[flag], unseen: m.thread?.unseen }))
+      const changed = messages.filter((m, i) => !!before[i].value !== !!value)
+      let failed = false
       // Number of unread messages a row stands for (for the folder counter).
       const unreadIn = (m, b) => (m.thread ? b.unseen : b.value ? 0 : 1)
       messages.forEach((m) => {
@@ -387,8 +428,20 @@ export const useMail = defineStore('mail', {
             if (m.thread && b.unseen !== undefined) m.thread.unseen = b.unseen
           })
           useToasts().error(t('toast.failed', { msg: e.message }))
+          failed = true
         }
       }
+      // Several messages at once (selection): offer undo for the ones that changed.
+      if (undo && !failed && changed.length) {
+        const n = changed.reduce((sum, m) => sum + uidsOf(m).length, 0)
+        this.toastWithUndo(t(`undo.${flag}${value ? 'On' : 'Off'}`, { n }), () => this.setFlagMany(changed, flag, !value))
+      }
+    },
+
+    /** A short message with an "Undo" button (for changes that are easy to turn back). */
+    toastWithUndo(text, undo) {
+      const seconds = Number(useSession().settings.undo_seconds ?? 5)
+      useToasts().show(text, { seconds: Math.max(seconds, 4), action: { label: t('actions.undo'), run: undo } })
     },
 
     /**
@@ -405,7 +458,7 @@ export const useMail = defineStore('mail', {
       await this.loadMessages()
     },
 
-    async setLabel(messages, key, on, extra = []) {
+    async setLabel(messages, key, on, extra = [], { undo = true } = {}) {
       const lower = key.toLowerCase()
       const all = [...messages, ...extra]
       const before = all.map((m) => [...(m.labels ?? [])])
@@ -422,6 +475,15 @@ export const useMail = defineStore('mail', {
           useToasts().error(t('toast.failed', { msg: e.message }))
           return
         }
+      }
+      if (undo) {
+        const label = labelMap(useSession().settings)[lower]
+        const name = label ? labelName(label) : key
+        // Undo only touches the messages that really changed.
+        const changed = all.filter((m, i) => before[i].map((k) => k.toLowerCase()).includes(lower) !== on)
+        const changedMsgs = messages.filter((m) => changed.includes(m))
+        const changedExtra = extra.filter((m) => changed.includes(m))
+        if (changed.length) this.toastWithUndo(t(on ? 'undo.labelOn' : 'undo.labelOff', { name }), () => this.setLabel(changedMsgs, key, !on, changedExtra, { undo: false }))
       }
     },
 

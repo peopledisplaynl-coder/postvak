@@ -7,6 +7,7 @@ use Postvak\Controllers\TrustedSenderController;
 use Postvak\Controllers\AuthController;
 use Postvak\Controllers\CalendarController;
 use Postvak\Controllers\ContactController;
+use Postvak\Controllers\FileController;
 use Postvak\Controllers\MailController;
 use Postvak\Controllers\PushController;
 use Postvak\Controllers\RuleController;
@@ -131,6 +132,15 @@ $router->delete('/templates/{id}', [$rules, 'destroyTemplate']);
 $signatureImages = new SignatureImageController();
 $router->post('/signature-images', [$signatureImages, 'store']);
 $router->get('/signature-images/{token}', [$signatureImages, 'show']);
+
+// Large attachments as a download link. The page and the download itself are public (secret link).
+$files = new FileController();
+$router->get('/files', [$files, 'index']);
+$router->post('/files', [$files, 'create']);
+$router->post('/files/{token}/chunk', [$files, 'chunk']);
+$router->delete('/files/{token}', [$files, 'destroy']);
+$router->get('/files/{token}', [$files, 'page']);
+$router->get('/files/{token}/download', [$files, 'download']);
 
 $router->get('/health', static fn () => \Postvak\Http\Response::json(['ok' => true, 'version' => POSTVAK_VERSION]));
 

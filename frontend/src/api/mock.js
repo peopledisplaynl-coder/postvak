@@ -97,7 +97,19 @@ function makeMessages(accountId, folder, count) {
   })
 }
 
+/** The search filters of the list request (filter=unseen,flagged,attachment&since=7&from=…). */
+function applyFilters(list, query) {
+  const flags = String(query.filter ?? '').split(',')
+  if (flags.includes('unseen')) list = list.filter((x) => !x.seen)
+  if (flags.includes('flagged')) list = list.filter((x) => x.flagged)
+  if (flags.includes('attachment')) list = list.filter((x) => x.has_attachments)
+  if (query.since) list = list.filter((x) => Date.parse(x.date) > Date.now() - Number(query.since) * 86400000)
+  if (query.from) list = list.filter((x) => x.from.email.toLowerCase() === String(query.from).toLowerCase())
+  return list
+}
+
 const store = {}
+let sharedFiles = []
 function box(accountId, folder) {
   const key = `${accountId}:${folder}`
   if (!store[key]) store[key] = makeMessages(accountId, folder, folder === 'INBOX' ? 42 : folder === 'Trash' ? 0 : 8)
@@ -158,7 +170,7 @@ function extrasMock(method, path, body) {
 const wait = (ms = 250) => new Promise((r) => setTimeout(r, ms))
 const roleToPath = { archive: 'Archive', trash: 'Trash', junk: 'Junk', inbox: 'INBOX' }
 
-export async function mockRequest(method, path, { body = {}, query = {}, form = null } = {}) {
+export async function mockRequest(method, path, { body = {}, query = {}, form = null, raw = null } = {}) {
   await wait()
   const m = path.match(/^\/accounts\/(\d+)(\/.*)?$/)
   const id = m ? Number(m[1]) : null
@@ -202,6 +214,23 @@ export async function mockRequest(method, path, { body = {}, query = {}, form = 
     return session()
   }
   if (path === '/auth/logout') { sessionStorage.removeItem('pv-mock-login'); return null }
+  // Large files as a download link (pieces of 1 MB in the demo).
+  if (path === '/files' && method === 'GET') return { files: sharedFiles.filter((f) => f.complete), chunk_bytes: 1024 * 1024, max_bytes: 2 * 1024 ** 3, days: 30, attach_max_bytes: 20 * 1024 * 1024 }
+  if (path === '/files' && method === 'POST') {
+    const token = Math.random().toString(16).slice(2).padEnd(32, '0').slice(0, 32)
+    const f = { token, name: body.name, size: body.size, mime: body.mime, received: 0, complete: false, downloads: 0, url: `/api/files/${token}`, created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 30 * 86400000).toISOString() }
+    sharedFiles.push(f)
+    return { ...f }
+  }
+  const chunkMatch = path.match(/^\/files\/(\w+)\/chunk$/)
+  if (chunkMatch) {
+    const f = sharedFiles.find((x) => x.token === chunkMatch[1])
+    if (Number(query.offset) === f.received) f.received += raw.size
+    f.complete = f.received >= f.size
+    return { ...f }
+  }
+  if (path.startsWith('/files/') && method === 'DELETE') { sharedFiles = sharedFiles.filter((x) => `/files/${x.token}` !== path); return { ok: true } }
+
   if (path === '/settings' && method === 'PATCH') return (settings = { ...settings, ...body })
   if (path === '/settings') return settings
   if (sub === '/scheduled' && method === 'POST') return { id: 1, send_at: new Date(Date.now() + 86400000).toISOString() }
@@ -242,6 +271,7 @@ export async function mockRequest(method, path, { body = {}, query = {}, form = 
     let all = accounts.flatMap((a) => box(a.id, 'INBOX')).sort((a, b) => b.date.localeCompare(a.date))
     if (query.q) all = all.filter((x) => (x.subject + x.from.name).toLowerCase().includes(query.q.toLowerCase()))
     if (query.label) all = all.filter((x) => (x.labels ?? []).includes(query.label.toLowerCase()))
+    all = applyFilters(all, query)
     const page = Number(query.page || 1), per = Number(query.per_page || 50)
     return { total: all.length, page, per_page: per, messages: all.slice((page - 1) * per, page * per), errors: [] }
   }
@@ -257,6 +287,7 @@ export async function mockRequest(method, path, { body = {}, query = {}, form = 
     let list = box(id, query.folder || 'INBOX')
     if (query.q) list = list.filter((x) => (x.subject + x.from.name).toLowerCase().includes(query.q.toLowerCase()))
     if (query.label) list = list.filter((x) => (x.labels ?? []).includes(query.label.toLowerCase()))
+    list = applyFilters(list, query)
     const by = {
       date_desc: (a, b) => b.date.localeCompare(a.date),
       date_asc: (a, b) => a.date.localeCompare(b.date),

@@ -112,6 +112,8 @@ const defaultFields = [
   { key: 'density', label: () => t('settings.density'), options: [['comfortable', t('settings.comfortable')], ['compact', t('settings.compact')]] },
   { key: 'show_images', label: () => t('settings.showImages'), options: [['ask', t('settings.imagesAsk')], ['always', t('settings.imagesAlways')], ['never', t('settings.imagesNever')]] },
   { key: 'sort', label: () => t('list.sort'), options: ['date_desc', 'date_asc', 'from', 'subject', 'size_desc'].map((v) => [v, t(`list.sortOptions.${v}`)]) },
+  { key: 'page_size_mobile', label: () => `${t('settings.pageSize')}: ${t('settings.pageSizeMobile')}`, options: [5, 10, 15, 25, 50, 100].map((n) => [n, t('settings.messagesN', { n })]) },
+  { key: 'page_size', label: () => `${t('settings.pageSize')}: ${t('settings.pageSizeDesktop')}`, options: [5, 10, 15, 25, 50, 100].map((n) => [n, t('settings.messagesN', { n })]) },
   { key: 'undo_seconds', label: () => t('settings.undoSeconds'), options: [0, 3, 5, 10, 20].map((v) => [v, v ? t('settings.seconds', { n: v }) : t('actions.none')]) },
 ]
 

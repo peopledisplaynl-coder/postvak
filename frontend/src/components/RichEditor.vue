@@ -129,11 +129,28 @@ function insertContent(html) {
   editor.value?.chain().focus().insertContent(html || '').run()
 }
 
+/**
+ * Insert HTML where the user is writing, but never inside or after the signature: when the cursor is in the
+ * signature (or nowhere yet), it goes just above the "--" line.
+ */
+function insertAboveSignature(html) {
+  const ed = editor.value
+  if (!ed) return
+  let sigPos = null
+  ed.state.doc.descendants((node, pos) => {
+    if (sigPos === null && node.type.name === 'paragraph' && node.textContent.trim() === '--') sigPos = pos
+    return sigPos === null
+  })
+  const at = ed.state.selection.from
+  if (sigPos === null || at < sigPos) ed.chain().focus().insertContent(html || '').run()
+  else ed.chain().insertContentAt(sigPos, html || '').run()
+}
+
 function focus(where = 'start') {
   editor.value?.commands.focus(where)
 }
 
-defineExpose({ setContent, getHtml, getText, focus, insertContent })
+defineExpose({ setContent, getHtml, getText, focus, insertContent, insertAboveSignature })
 </script>
 
 <template>

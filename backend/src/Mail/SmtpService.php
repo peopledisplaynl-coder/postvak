@@ -243,8 +243,14 @@ final class SmtpService
         ) ?? $html;
     }
 
-    private static function htmlToText(string $html): string
+    public static function htmlToText(string $html): string
     {
+        // Links keep their address: "name <https://…>" (unless the text already is the address).
+        $html = preg_replace_callback('~<a\s[^>]*href=(["\'])(https?://[^"\']+)\1[^>]*>(.*?)</a>~is', static function (array $m): string {
+            $label = trim(html_entity_decode(strip_tags($m[3]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            $url = html_entity_decode($m[2], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            return $label === '' || $label === $url ? htmlspecialchars($url) : htmlspecialchars($label) . ' &lt;' . htmlspecialchars($url) . '&gt;';
+        }, $html) ?? $html;
         $text = preg_replace(['~<br\s*/?>~i', '~</p>~i', '~</div>~i'], "\n", $html) ?? $html;
         $text = html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         return trim(preg_replace("/\n{3,}/", "\n\n", $text) ?? $text);

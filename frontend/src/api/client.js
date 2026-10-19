@@ -27,24 +27,27 @@ export function setUnauthorizedHandler(fn) {
  * Small fetch wrapper: JSON in/out, CSRF header, consistent errors.
  * Pass `form` (FormData) instead of `body` for uploads.
  */
-export async function request(method, path, { body, form, query, keepalive } = {}) {
-  if (USE_MOCK) return mockRequest(method, path, { body, query, form })
+export async function request(method, path, { body, form, raw, query, keepalive, signal } = {}) {
+  if (USE_MOCK) return mockRequest(method, path, { body, query, form, raw })
 
   const qs = query ? '?' + new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== null && v !== '')) : ''
   const headers = { Accept: 'application/json' }
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken
   if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if (raw !== undefined) headers['Content-Type'] = 'application/octet-stream'
 
   let res
   try {
     res = await fetch(`${BASE}${path}${qs}`, {
       method,
       headers,
-      body: form ?? (body !== undefined ? JSON.stringify(body) : undefined),
+      body: raw ?? form ?? (body !== undefined ? JSON.stringify(body) : undefined),
       credentials: 'same-origin',
       keepalive,
+      signal,
     })
-  } catch {
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e
     throw new ApiError(0, 'offline')
   }
 
@@ -72,6 +75,8 @@ export const api = {
   put: (p, body) => request('PUT', p, { body }),
   del: (p, query) => request('DELETE', p, { query }),
   upload: (p, form) => request('POST', p, { form }),
+  /** Raw bytes (a piece of a large file). */
+  chunk: (p, blob, query, signal) => request('POST', p, { raw: blob, query, signal }),
 }
 
 /** URL for attachments and inline images (relative to the app). */

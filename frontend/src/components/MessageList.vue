@@ -56,8 +56,18 @@ function openSearch() {
 }
 defineExpose({ openSearch })
 
+// "More from this sender" (from the reader) opens the search with the sender filter.
+watch(() => mail.filters.from, (from) => { if (from) searching.value = true }, { immediate: true })
+const periods = [7, 30, 365]
+const periodOpen = ref(false)
+function choosePeriod(days) {
+  periodOpen.value = false
+  mail.setFilter('since', days)
+}
+
 function closeSearch() {
   searching.value = false
+  mail.clearFilters()
   if (searchInput.value) searchInput.value = ''
 }
 
@@ -247,6 +257,38 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
         >{{ t('list.searchBody') }}</button>
       </template>
     </header>
+    <!-- Search filters -->
+    <div v-if="searching" class="flex flex-wrap items-center gap-1.5 border-b border-line px-3 py-2" role="group" :aria-label="t('filters.label')">
+      <button
+        v-for="key in ['unseen', 'flagged', 'attachment']" :key="key"
+        class="rounded-full px-3 py-1 text-sm ring-1 transition"
+        :class="mail.filters[key] ? 'bg-accent-soft font-medium text-accent ring-accent/40' : 'text-muted ring-line hover:bg-sunken'"
+        :aria-pressed="mail.filters[key]"
+        @click="mail.setFilter(key, !mail.filters[key])"
+      >{{ t(`filters.${key}`) }}</button>
+      <div class="relative">
+        <button
+          class="flex items-center gap-1 rounded-full px-3 py-1 text-sm ring-1 transition"
+          :class="mail.filters.since ? 'bg-accent-soft font-medium text-accent ring-accent/40' : 'text-muted ring-line hover:bg-sunken'"
+          :aria-expanded="periodOpen"
+          @click="periodOpen = !periodOpen"
+        >{{ mail.filters.since ? t(`filters.since${mail.filters.since}`) : t('filters.period') }} ▾</button>
+        <div v-if="periodOpen" class="fixed inset-0 z-20" @click="periodOpen = false" />
+        <ul v-if="periodOpen" class="absolute left-0 z-30 mt-1 w-48 overflow-hidden rounded-xl bg-surface py-1 shadow-lg ring-1 ring-line" role="menu">
+          <li v-for="d in [0, ...periods]" :key="d">
+            <button role="menuitemradio" :aria-checked="mail.filters.since === d" class="flex w-full justify-between px-4 py-2 text-left text-sm hover:bg-sunken" :class="mail.filters.since === d ? 'font-medium text-accent' : ''" @click="choosePeriod(d)">
+              {{ d ? t(`filters.since${d}`) : t('filters.anyTime') }}<span v-if="mail.filters.since === d">✓</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+      <span v-if="mail.filters.from" class="flex min-w-0 items-center gap-1 rounded-full bg-accent-soft py-1 pr-1 pl-3 text-sm font-medium text-accent ring-1 ring-accent/40">
+        <span class="truncate">{{ t('filters.from', { email: mail.filters.from }) }}</span>
+        <button class="rounded-full px-1.5 hover:bg-accent/10" :aria-label="t('filters.clearFrom')" @click="mail.setFilter('from', '')">✕</button>
+      </span>
+      <button v-if="mail.filtersActive" class="ml-auto rounded-lg px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink" @click="mail.clearFilters()">{{ t('filters.clear') }}</button>
+    </div>
+
     <!-- Label filter -->
     <div v-if="mail.labelFilter" class="flex items-center gap-2 border-b border-line px-4 py-2 text-sm">
       <span class="text-muted">{{ t('labels.filtered') }}</span>

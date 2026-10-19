@@ -6,6 +6,8 @@ on your phone (PWA). No Node.js, no daemons, no SSH needed on the server.
 
 *Postvak* is Dutch for "mailbox".
 
+📖 **User manual (Dutch): [docs/HANDLEIDING.md](docs/HANDLEIDING.md)** · Installation: [English](docs/INSTALL.md) · [Nederlands](docs/INSTALL.nl.md)
+
 <p align="center">
   <img src="docs/screenshots/desktop-light.png" width="720" alt="Desktop layout: folders, message list and reader">
 </p>
@@ -25,13 +27,17 @@ on your phone (PWA). No Node.js, no daemons, no SSH needed on the server.
 - Conversation view (IMAP THREAD), including your own replies from Sent.
 - One inbox for all your accounts, or each account separately.
 - Multi-select, move to folder, drag & drop onto folders, create/rename/delete folders.
-- Search (subject and sender, optionally the message text), mark all as read, empty trash and spam.
+- Search (subject and sender, optionally the message text) with filters: unread, starred, has attachment,
+  period, more from this sender. Mark all as read, empty trash and spam.
+- The list loads a set number of messages at a time (separately for phone/tablet and computer) and the rest as you scroll.
 - Snooze: a message disappears and comes back to the inbox at the time you choose.
 - Attachment viewer for images and PDF, print view.
 
 **Writing**
 - Rich text editor (headings, lists, links, colours, clean paste from Word), the quoted original kept intact.
-- Drafts saved automatically, send later, undo send, address autocomplete from a contacts list.
+- Quick reply box under every message; drafts saved automatically, send later, undo send, address autocomplete.
+- Large files (over 10 MB, or more than the mail server accepts) go as a download link from your own server,
+  valid for 30 days, uploaded in pieces so the host's upload limit does not matter.
 - Send from any of your accounts, each with its own signature (with a logo, sent as an embedded image); reusable templates.
 - Coloured labels (shared with Thunderbird), filter a folder on a label.
 
@@ -56,6 +62,7 @@ on your phone (PWA). No Node.js, no daemons, no SSH needed on the server.
 - Privacy by default: remote images blocked until you allow them (per message, sender or domain), mail HTML
   sanitised on the server and again in the browser, shown in a sandboxed frame.
 - Light and dark theme, 8 accent colours, three text sizes, keyboard shortcuts (press `?`), Dutch and English interface.
+- Installed apps (iPhone, iPad, Android, desktop) notice a new version by themselves and update.
 - Admin page: users, login attempts and blocks, allowed domains, default settings, background job status.
 
 ## How it works
@@ -79,7 +86,8 @@ and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - MySQL 5.7+ or MariaDB 10.3+
 - Apache or LiteSpeed with `mod_rewrite` (for `.htaccess`), HTTPS
 - An IMAP + SMTP mail server (the one from your hosting is fine)
-- Optional: a cron job every 5 minutes, for notifications, reminders, send later and snooze
+- Optional: a cron job every 5 minutes, for notifications, rules, out-of-office replies, reminders, send later,
+  snooze and cleaning up expired download links
 
 ## Installing
 
@@ -135,8 +143,8 @@ frontend/             Vue 3 + Vite + Tailwind CSS 4
   src/stores/         Pinia stores
   src/i18n/           nl.js (reference) and en.js
   e2e/                Playwright tests
-scripts/              deploy (FTP), release zip, screenshots, translation check
-docs/                 architecture, roadmap, installation guides
+scripts/              deploy (FTP), release zip, screenshots (README and manual), translation check
+docs/                 user manual (HANDLEIDING.md), architecture, roadmap, installation guides
 ```
 
 ## Contributing

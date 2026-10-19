@@ -4,6 +4,7 @@ import DOMPurify from 'dompurify'
 import AppIcon from './AppIcon.vue'
 import AttachmentViewer from './AttachmentViewer.vue'
 import InvitationCard from './InvitationCard.vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useMail } from '../stores/mail.js'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
@@ -26,6 +27,8 @@ const props = defineProps({
 const emit = defineEmits(['loaded', 'reply', 'collapse'])
 
 const mail = useMail()
+const route = useRoute()
+const router = useRouter()
 const session = useSession()
 const toasts = useToasts()
 
@@ -63,6 +66,13 @@ const senderDomain = computed(() => senderEmail.value.split('@')[1] ?? '')
 const ownAddress = computed(() => session.accounts.some((a) => a.email.toLowerCase() === senderEmail.value))
 
 const addingContact = ref(false)
+/** Close the reader and list the other messages from this sender. */
+function moreFromSender() {
+  const { uid: _, acc: __, ...rest } = route.query
+  router.push({ query: rest })
+  mail.searchFrom(senderEmail.value)
+}
+
 async function addContact() {
   addingContact.value = true
   try {
@@ -217,6 +227,14 @@ defineExpose({ message, reload: load, print: printMessage })
         >
           <AppIcon name="filter" :size="20" />
         </RouterLink>
+        <button
+          v-if="senderEmail && !ownAddress"
+          class="shrink-0 rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink"
+          :title="t('filters.moreFrom')"
+          @click.stop="moreFromSender"
+        >
+          <AppIcon name="search" :size="20" />
+        </button>
         <button
           v-if="senderEmail && !ownAddress"
           class="shrink-0 rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink disabled:opacity-50"

@@ -91,10 +91,15 @@ users, linked accounts, preferences and contacts.
 
 ## App updates (PWA)
 
-- The service worker (vite-plugin-pwa, `registerType: 'prompt'`) is registered in `frontend/src/appUpdate.js`. Installed
-  apps rarely restart (iOS home screen), so it calls `registration.update()` when the app becomes visible and every
-  30 minutes. A waiting version is activated at once (skip waiting + reload) unless a composer is open; then a toast
-  offers "Refresh". `index.html` and `sw.js` are served with `Cache-Control: no-cache`.
+- `frontend/src/appUpdate.js` registers the service worker (vite-plugin-pwa, `registerType: 'prompt'`) and checks in
+  two ways at start, when the app becomes visible and every 30 minutes: `registration.update()`, and
+  `/api/health` (server version vs. `__APP_VERSION__`). The second one also works when a phone keeps an old worker
+  waiting (Android keeps installed apps alive), which the first cannot fix.
+- On start/return with no composer open, a new version is applied at once (once per version per session, so a
+  half-finished deploy cannot cause a reload loop). Otherwise `UpdateBar.vue` shows "Update".
+- Applying: activate the waiting worker; if nothing happens within 4 s (or no worker is waiting), empty the
+  Cache Storage and reload. The worker is not unregistered, so push subscriptions stay.
+  `index.html` and `sw.js` are served with `Cache-Control: no-cache`.
 
 ## Background jobs and push notifications
 
@@ -167,6 +172,20 @@ users, linked accounts, preferences and contacts.
   it; the signature refers to `/api/signature-images/<token>` (only for its owner). `SmtpService` turns those into
   inline `cid:` attachments when a mail is built, so recipients see the logo without loading remote images.
 
+## Quick reply, search filters, large files
+
+- **Quick reply** (`QuickReply.vue`, under the open message or the newest message of a conversation) does not send
+  by itself: it opens `ComposeSheet` with `draft.text` and `draft.send`, which fills in the text, signature, quote
+  and reply headers and sends while staying hidden (undo send included). If sending fails the composer shows up.
+- **Search filters**: `?filter=unseen,flagged,attachment&since=<days>&from=<address>` on both list endpoints,
+  turned into IMAP SEARCH criteria by `ImapService::filterCriteria()`. "Has attachment" uses
+  `HEADER Content-Type "multipart/mixed"` (IMAP has no attachment criterion).
+- **Large files** (`Files\SharedFiles`, `FileController`, `frontend/src/sharedFiles.js`): a file over 10 MB, or one that
+  would make the attachments bigger than the server accepts (`max_attachment_mb`, `upload_max_filesize`,
+  `post_max_size`), is uploaded in 4 MB pieces to `storage/files/` and the composer puts a link paragraph above the
+  signature. Links work for 30 days; the cron job removes expired and unfinished uploads. At most 10 GB of
+  active files per user.
+
 ## Rules, out-of-office replies, templates
 
 - Shared hosting offers no delivery hooks and often no ManageSieve, so rules and out-of-office replies run in
@@ -210,7 +229,7 @@ All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` b
 | PATCH / DELETE | `/accounts/{id}` | Edit (name, colour, signature, folders, server, password) / remove |
 | GET | `/accounts/{id}/folders` | Folders with unseen/total counts and detected role |
 | POST / PATCH / DELETE | `/accounts/{id}/folders` | Create `{name, parent?}`, rename `{path, name}`, delete `?path=` (not INBOX or special folders) |
-| GET | `/accounts/{id}/messages?folder=&page=&per_page=&q=&sort=` | Message summaries incl. `snippet` (preview line, cached in `message_snippets`); `sort` = `date_desc` (default), `date_asc`, `from`, `subject`, `size_desc`. `threads=1` (with `date_desc`): one row per conversation via `UID THREAD REFS` (or `REFERENCES`); the row is the newest message plus `thread: {count, uids, unseen, flagged, participants}`. Response has `threaded: false` when the server cannot thread. Dates are UTC. Sorted by the server (IMAP SORT), searched in from/to/subject (`body=1`: also the message text) |
+| GET | `/accounts/{id}/messages?folder=&page=&per_page=&q=&sort=` | Message summaries incl. `snippet` (preview line, cached in `message_snippets`); `sort` = `date_desc` (default), `date_asc`, `from`, `subject`, `size_desc`. `threads=1` (with `date_desc`): one row per conversation via `UID THREAD REFS` (or `REFERENCES`); the row is the newest message plus `thread: {count, uids, unseen, flagged, participants}`. Response has `threaded: false` when the server cannot thread. Dates are UTC. Sorted by the server (IMAP SORT), searched in from/to/subject (`body=1`: also the message text); filters `filter=unseen,flagged,attachment`, `since=<days>`, `from=<address>`; `per_page` 5–100 |
 | GET | `/accounts/{id}/messages/{uid}?folder=&images=1` | Full message, sanitised |
 | GET | `/accounts/{id}/messages/{uid}/conversation?folder=` | The conversation `uid` belongs to, oldest first: messages in this folder (IMAP `THREAD`) plus own replies found in Sent (by `In-Reply-To`/`References`) |
 | GET | `/accounts/{id}/messages/{uid}/attachments/{index}?folder=` | Download |
@@ -278,6 +297,12 @@ All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` b
 | POST | `/accounts/{id}/labels` | `{folder, uids, add?: [keyword], remove?: [keyword]}`; list endpoints take `label=` |
 | POST | `/signature-images` | multipart `file` (PNG/JPEG/GIF/WebP, max 300 kB) → `{url}` |
 | GET | `/signature-images/{token}` | The image (owner only) |
+| GET | `/files` | Own large files shared as a link + limits `{files, chunk_bytes, max_bytes, days, attach_max_bytes}` |
+| POST | `/files` | `{name, size, mime}` → new upload `{token, url, …}` |
+| POST | `/files/{token}/chunk?offset=N` | Raw bytes of one piece (≤ 4 MB); a piece at a stale offset is ignored → `{received, complete}` |
+| DELETE | `/files/{token}` | Remove a shared file now |
+| GET | `/files/{token}` | Public download page (secret link; no login) |
+| GET | `/files/{token}/download` | Public: the file itself |
 | GET | `/health` | Version check |
 
 ## Admin

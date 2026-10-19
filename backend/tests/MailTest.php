@@ -49,3 +49,18 @@ test('removeHeader also handles the last header and LF-only messages', function 
     assertSame("From: a@b.nl\r\n\r\nbody", SmtpService::removeHeader("From: a@b.nl\r\nBcc: x@y.nl\r\n\r\nbody", 'Bcc'));
     assertSame("Subject: Hoi\r\n\r\nTo: blijft", SmtpService::removeHeader("To: a@b.nl\r\nSubject: Hoi\r\n\r\nTo: blijft", 'To'));
 });
+
+test('search filters become IMAP criteria', function () {
+    $now = gmmktime(12, 0, 0, 10, 19, 2026);
+    assertSame([], \Postvak\Mail\ImapService::filterCriteria([], $now));
+    assertSame(
+        ['UNSEEN', 'FLAGGED', 'HEADER', 'Content-Type', '"multipart/mixed"', 'SINCE', '12-Oct-2026', 'FROM', '"jan@x.nl"'],
+        \Postvak\Mail\ImapService::filterCriteria(['unseen' => true, 'flagged' => true, 'attachment' => true, 'since' => 7, 'from' => 'jan@x.nl'], $now)
+    );
+    assertSame(['FROM', '"a\"b"'], \Postvak\Mail\ImapService::filterCriteria(['from' => 'a"b'], $now));
+});
+
+test('plain-text version keeps link addresses', function () {
+    $text = SmtpService::htmlToText('<p>📎 <a href="https://mail.x.nl/api/files/abc">groot.zip</a> (3 MB)</p><p><a href="https://x.nl">https://x.nl</a></p>');
+    assertSame("📎 groot.zip <https://mail.x.nl/api/files/abc> (3 MB)\nhttps://x.nl", $text);
+});

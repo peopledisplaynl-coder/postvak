@@ -41,6 +41,11 @@ test('select several messages and mark them read', async ({ page, isMobile }) =>
   await expect(page.getByText('2 geselecteerd')).toBeVisible()
   await page.locator('header button[title="Gelezen / ongelezen"]').click()
   await expect(page.getByText('2 geselecteerd')).toBeVisible()
+  // Undo turns the change back.
+  await expect(page.getByText('2 berichten als gelezen gemarkeerd')).toBeVisible()
+  await page.getByRole('button', { name: 'Ongedaan maken' }).click()
+  await expect(page.getByText('2 berichten als ongelezen gemarkeerd')).toHaveCount(0)
+  await expect(rows(page).nth(0).locator('.font-semibold').first()).toBeVisible()
 })
 
 test('compose: editor, formatting and a draft that is kept', async ({ page }) => {
@@ -213,4 +218,59 @@ test('phones load fewer messages and the rest when scrolling', async ({ page, is
   await select.selectOption('10')
   await page.goBack()
   await expect.poll(() => rows(page).count()).toBeLessThanOrEqual(10)
+})
+
+test('about page shows the maker and the version', async ({ page }) => {
+  await login(page)
+  await page.goto('/settings/about')
+  await expect(page.getByRole('heading', { name: 'Postvak' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'PeopleDisplay', exact: true })).toHaveAttribute('href', 'https://peopledisplay.nl')
+  await expect(page.getByText(/^Versie \d/)).toBeVisible()
+})
+
+test('quick reply under a message sends without opening the composer', async ({ page }) => {
+  await login(page)
+  await rows(page).first().locator('[role=button]').click()
+  const box = page.getByRole('textbox', { name: 'Snel antwoorden' })
+  await expect(box).toBeVisible()
+  await box.fill('Prima, tot dan!')
+  await page.getByRole('button', { name: 'Versturen', exact: true }).last().click()
+  await expect(page.getByText('Bericht wordt verstuurd…')).toBeVisible()
+  await expect(page.locator('form .ProseMirror')).toBeHidden()
+  await expect(box).toHaveValue('')
+
+  // "Full editor" opens the composer with the text typed so far.
+  await box.fill('Even uitgebreider')
+  await page.getByRole('button', { name: 'Volledig venster' }).click()
+  await expect(page.locator('form .ProseMirror')).toContainText('Even uitgebreider')
+})
+
+test('search filters: unread, attachment and more from a sender', async ({ page }) => {
+  await login(page)
+  await page.getByRole('button', { name: 'Zoeken' }).first().click()
+  const all = await rows(page).count()
+  await page.getByRole('button', { name: 'Ongelezen', exact: true }).click()
+  await expect.poll(() => rows(page).count()).toBeLessThan(all)
+  await expect(page.getByRole('button', { name: 'Ongelezen', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('button', { name: 'Wissen' }).click()
+  await expect.poll(() => rows(page).count()).toBe(all)
+  await page.getByRole('button', { name: 'Terug' }).first().click()
+
+  // From the reader: "More from this sender".
+  await rows(page).first().locator('[role=button]').click()
+  await page.getByTitle('Meer van deze afzender').first().click()
+  await expect(page.getByText(/^Van: /)).toBeVisible()
+  await expect.poll(() => rows(page).count()).toBeLessThan(all)
+})
+
+test('a large file goes as a download link', async ({ page }) => {
+  await login(page)
+  await page.getByRole('button', { name: 'Nieuw bericht' }).first().click()
+  const big = Buffer.alloc(11 * 1024 * 1024, 7)
+  await page.locator('form input[type=file]').setInputFiles({ name: 'presentatie.mov', mimeType: 'video/quicktime', buffer: big })
+  await expect(page.locator('form li', { hasText: 'presentatie.mov' })).toContainText('downloadlink')
+  await expect(page.locator('form .ProseMirror a', { hasText: 'presentatie.mov' })).toHaveAttribute('href', /\/api\/files\/\w{32}$/)
+  // In-app navigation (a page load would reset the demo data).
+  await page.evaluate(() => { history.pushState({}, '', '/settings/privacy'); dispatchEvent(new PopStateEvent('popstate')) })
+  await expect(page.getByRole('link', { name: 'presentatie.mov' })).toBeVisible()
 })

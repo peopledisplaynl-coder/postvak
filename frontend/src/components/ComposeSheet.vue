@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { fileLimits, needsLink, uploadAsLink, discardUpload, linkHtml } from '../sharedFiles.js'
 import DOMPurify from 'dompurify'
 import AppIcon from './AppIcon.vue'
 import RecipientInput from './RecipientInput.vue'
@@ -16,7 +17,8 @@ import { t, locale } from '../i18n/index.js'
 
 /**
  * Compose a new message, reply, forward, or continue a saved draft.
- * draft = { accountId, mode: 'new'|'reply'|'replyAll'|'forward'|'draft', message? }
+ * draft = { accountId, mode: 'new'|'reply'|'replyAll'|'forward'|'draft', message?, text?, send? }
+ * text = plain text to start with (quick reply); send = send it right away without showing the composer.
  *
  * The message is saved as a draft in the Drafts folder a few seconds after every
  * change, and when the composer is closed. Sending removes the draft.
@@ -31,6 +33,8 @@ const mail = useMail()
 const toasts = useToasts()
 
 const fromId = ref(props.draft.accountId ?? session.loginAccount?.id)
+// Quick reply "Send": the composer does the work out of sight (shown again only if something goes wrong).
+const hidden = ref(!!(props.draft.send && props.draft.text?.trim()))
 const to = ref([])
 const cc = ref([])
 const bcc = ref([])
@@ -126,14 +130,23 @@ onMounted(async () => {
     body = '<p></p>'
   }
 
+  // Text typed in the quick reply box: one paragraph per line.
+  const typed = (props.draft.text ?? '').trim()
+  const start = typed ? typed.split(/\n/).map((line) => `<p>${escape(line) || '<br>'}</p>`).join('') : '<p></p>'
   const signature = from.value?.signature_html
-  if (signature) body = `<p></p><p></p><p>--</p>${DOMPurify.sanitize(signature)}`
+  body = signature ? `${start}<p></p><p>--</p>${DOMPurify.sanitize(signature)}` : start
 
   editor.value.setContent(body)
-  if (mode === 'reply' || mode === 'replyAll') editor.value.focus('start')
+  // Cursor at the end of the typed text (each paragraph takes its length + 2 positions).
+  const afterTyped = typed ? typed.split(/\n/).reduce((n, line) => n + line.length + 2, 0) - 1 : 'start'
+  if (mode === 'reply' || mode === 'replyAll') editor.value.focus(afterTyped)
   // Start watching for changes only after the initial fill (watchers run on the next tick).
   await nextTick()
   ready = true
+  if (hidden.value) {
+    dirty = true
+    if (!(await send())) hidden.value = false
+  }
 })
 
 /**
@@ -350,17 +363,62 @@ const saveLabel = computed(() => {
   return ''
 })
 
-onBeforeUnmount(() => clearTimeout(saveTimer))
+onBeforeUnmount(() => {
+  clearTimeout(saveTimer)
+  // Closing the composer stops large uploads that are not finished.
+  for (const u of bigUploads.value) if (u.state === 'uploading') removeBigUpload(u)
+})
 
 // ---- editing helpers
 
 function addPasted(list) {
-  files.value.push(...list)
+  takeFiles(list)
 }
 
 function addFiles(e) {
-  files.value.push(...e.target.files)
+  takeFiles([...e.target.files])
   e.target.value = ''
+}
+
+// ---- large files: sent as a download link (uploaded in pieces to the user's own server)
+const bigUploads = ref([]) // { id, name, size, progress, state: 'uploading'|'done'|'error', error?, token?, controller }
+const uploading = computed(() => bigUploads.value.some((u) => u.state === 'uploading'))
+let uploadSeq = 0
+
+async function takeFiles(list) {
+  const lim = await fileLimits()
+  for (const file of list) {
+    const attached = files.value.reduce((n, f) => n + f.size, 0) + serverAttachments.value.reduce((n, a) => n + (a.size ?? 0), 0)
+    if (needsLink(file, attached, lim)) startBigUpload(file)
+    else files.value.push(file)
+  }
+}
+
+async function startBigUpload(file) {
+  const entry = reactive({ id: ++uploadSeq, name: file.name, size: file.size, progress: 0, state: 'uploading', token: null, controller: new AbortController() })
+  bigUploads.value.push(entry)
+  try {
+    const info = await uploadAsLink(file, {
+      signal: entry.controller.signal,
+      onCreated: (c) => (entry.token = c.token),
+      onProgress: (p) => (entry.progress = p),
+    })
+    entry.state = 'done'
+    editor.value?.insertAboveSignature(linkHtml(info))
+  } catch (e) {
+    if (e?.name === 'AbortError') return
+    entry.state = 'error'
+    entry.error = e.message
+    if (entry.token) discardUpload(entry.token)
+  }
+}
+
+function removeBigUpload(entry) {
+  if (entry.state === 'uploading') {
+    entry.controller.abort()
+    if (entry.token) discardUpload(entry.token)
+  }
+  bigUploads.value = bigUploads.value.filter((u) => u !== entry)
 }
 
 // ---- drop files from the computer onto the composer
@@ -390,16 +448,20 @@ function onDrop(e) {
   dragDepth = 0
   fileOver.value = false
   const dropped = [...e.dataTransfer.files].filter((f) => f.size > 0 || f.type) // skip dropped folders
-  if (dropped.length) files.value.push(...dropped)
+  if (dropped.length) takeFiles(dropped)
 }
 
 // ---- send / close / discard
 
 async function send() {
+  if (uploading.value) {
+    toasts.error(t('bigFiles.waitForUpload'))
+    return false
+  }
   toInput.value?.commitText()
   if (!to.value.length && !cc.value.length && !bcc.value.length) {
     toasts.error(t('compose.noRecipients'))
-    return
+    return false
   }
   sending.value = true
   clearTimeout(saveTimer)
@@ -421,7 +483,7 @@ async function send() {
       dirty = false
       sending.value = false
       emit('close', { saved: true })
-      return
+      return true
     }
     // Saving the draft failed: send right away instead.
   }
@@ -440,8 +502,10 @@ async function send() {
     dirty = false
     toasts.show(t('toast.sent'))
     emit('close', { saved: !!draftUid.value })
+    return true
   } catch (e) {
     toasts.error(t('toast.failed', { msg: e.message }))
+    return false
   } finally {
     sending.value = false
   }
@@ -510,7 +574,7 @@ async function discard() {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-40 flex items-end justify-end bg-ink/30 sm:bg-transparent sm:p-4 sm:pointer-events-none" @keydown.esc="close">
+  <div v-show="!hidden" class="fixed inset-0 z-40 flex items-end justify-end bg-ink/30 sm:bg-transparent sm:p-4 sm:pointer-events-none" @keydown.esc="close">
     <form
       class="pt-safe pb-safe pointer-events-auto relative flex h-full w-full flex-col bg-surface shadow-2xl ring-1 ring-line sm:h-[min(640px,calc(100vh-2rem))] sm:w-[560px] sm:rounded-2xl"
       @submit.prevent="send"
@@ -645,7 +709,20 @@ async function discard() {
         </template>
       </div>
 
-      <ul v-if="files.length || serverAttachments.length" class="flex flex-wrap gap-2 border-t border-line px-4 py-2">
+      <ul v-if="files.length || serverAttachments.length || bigUploads.length" class="flex flex-wrap gap-2 border-t border-line px-4 py-2">
+        <li
+          v-for="u in bigUploads" :key="'b' + u.id"
+          class="flex items-center gap-2 rounded-lg px-2.5 py-1 text-sm"
+          :class="u.state === 'error' ? 'bg-danger/10 text-danger' : 'bg-accent-soft text-accent'"
+          :title="u.state === 'done' ? t('bigFiles.doneHint') : u.state === 'error' ? u.error : t('bigFiles.uploadingHint')"
+        >
+          <AppIcon name="link" :size="14" />
+          <span class="max-w-48 truncate">{{ u.name }}</span>
+          <span v-if="u.state === 'uploading'" class="tabular-nums">{{ Math.round(u.progress * 100) }}%</span>
+          <span v-else-if="u.state === 'done'">{{ t('bigFiles.asLink') }}</span>
+          <span v-else>{{ t('bigFiles.failed') }}</span>
+          <button v-if="u.state !== 'done'" type="button" class="opacity-70 hover:opacity-100" :aria-label="t('settings.remove')" @click="removeBigUpload(u)">×</button>
+        </li>
         <li v-for="a in serverAttachments" :key="'s' + a.index" class="flex items-center gap-2 rounded-lg bg-sunken px-2.5 py-1 text-sm">
           <AppIcon name="paperclip" :size="14" class="text-muted" />
           <span class="max-w-48 truncate">{{ a.name }}</span>

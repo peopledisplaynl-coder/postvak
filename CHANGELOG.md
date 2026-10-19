@@ -3,6 +3,48 @@
 All notable changes to Postvak. The format follows [Keep a Changelog](https://keepachangelog.com/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.6.2] - 2026-10-19
+
+### Added
+- User manual in Dutch: [docs/HANDLEIDING.md](docs/HANDLEIDING.md), with screenshots
+  (`node scripts/manual-screenshots.mjs` makes them again). Linked from the README and Settings → About Postvak.
+
+## [1.6.1] - 2026-10-19
+
+### Fixed
+- Installed app on Android (and other devices) now always notices a new version. Besides the service worker,
+  Postvak asks the server which version it runs (at start, when you return to the app, every 30 minutes). A new
+  version loads by itself when you come back to the app and are not writing; otherwise a bar at the bottom offers
+  "Update". If the phone keeps the old version waiting, "Update" empties the app cache and loads the new version
+  from the server (push notifications keep working).
+
+## [1.6.0] - 2026-10-19
+
+### Added
+- Quick reply: a box under the open message (or the newest one of a conversation) to answer straight away, with
+  "Reply all" when there are more people on it and "Full editor" to continue in the composer. Ctrl+Enter sends.
+  It goes through the normal composer (signature, quote, undo send).
+- Search filters: Unread, Starred, Has attachment and a period (past week / month / year), plus "More from this
+  sender" in the reader.
+- Large files as a download link: files over 10 MB, or more than the server accepts as attachments, are uploaded
+  in pieces to your own Postvak server; the message gets a link (works for 30 days). Overview, copy link and
+  remove under Settings → Privacy. Database update 013 runs by itself.
+- Undo for marking several messages read/unread or starred, and for adding or removing a label.
+- Admin → default settings: messages to load at a time (phone/tablet and computer).
+
+### Changed
+- The plain-text version of a sent message keeps the address of every link.
+
+## [1.5.1] - 2026-10-19
+
+### Added
+- Settings → About Postvak: version, maker (PeopleDisplay), licence, website, what's new, source code, reporting a
+  problem, and the open-source building blocks. Links live in `frontend/src/about.js`.
+- "Messages to load at a time" can now be set to 5.
+
+### Changed
+- In All inboxes the accounts are listed once (with their unread count) instead of twice.
+
 ## [1.5.0] - 2026-10-19
 
 ### Added
@@ -186,6 +228,10 @@ First public release.
 - First version: login with mailbox credentials, multiple accounts, swipe actions with undo,
   sanitised reader, composer, settings, responsive layout, dark mode, PWA, FTP deploy.
 
+[1.6.2]: ../../releases/tag/v1.6.2
+[1.6.1]: ../../releases/tag/v1.6.1
+[1.6.0]: ../../releases/tag/v1.6.0
+[1.5.1]: ../../releases/tag/v1.5.1
 [1.5.0]: ../../releases/tag/v1.5.0
 [1.4.1]: ../../releases/tag/v1.4.1
 [1.4.0]: ../../releases/tag/v1.4.0

@@ -741,16 +741,63 @@ final class ImapService
         $this->keyword = $keyword !== null && self::validKeyword($keyword) ? $keyword : null;
     }
 
-    /** IMAP search criteria: everything, or the text in sender, recipient, subject (and body); optionally one label. */
+    /** Search filters: unseen, flagged, attachment, since (days back), from (address). */
+    private array $filters = [];
+
+    /** Take the filters from the list request (?filter=unseen,flagged,attachment&since=30&from=a@b.nl). */
+    public function setFilters(?string $flags, mixed $sinceDays, ?string $from): void
+    {
+        $f = [];
+        foreach (explode(',', (string) $flags) as $flag) {
+            if (in_array($flag, ['unseen', 'flagged', 'attachment'], true)) {
+                $f[$flag] = true;
+            }
+        }
+        $days = (int) $sinceDays;
+        if ($days > 0) {
+            $f['since'] = min($days, 3650);
+        }
+        $from = trim((string) $from);
+        if ($from !== '' && mb_strlen($from) <= 200 && preg_match('/^[\x20-\x7e]+$/', $from)) {
+            $f['from'] = $from;
+        }
+        $this->filters = $f;
+    }
+
+    /** The filters as IMAP SEARCH criteria. */
+    public static function filterCriteria(array $f, ?int $now = null): array
+    {
+        $c = [];
+        if (!empty($f['unseen'])) {
+            $c[] = 'UNSEEN';
+        }
+        if (!empty($f['flagged'])) {
+            $c[] = 'FLAGGED';
+        }
+        if (!empty($f['attachment'])) {
+            // No standard IMAP criterion; mail with attachments is (almost always) multipart/mixed.
+            array_push($c, 'HEADER', 'Content-Type', '"multipart/mixed"');
+        }
+        if (!empty($f['since'])) {
+            array_push($c, 'SINCE', gmdate('j-M-Y', ($now ?? time()) - (int) $f['since'] * 86400));
+        }
+        if (!empty($f['from'])) {
+            $from = str_replace(["\r", "\n"], ' ', (string) $f['from']);
+            array_push($c, 'FROM', '"' . addcslashes($from, '"\\') . '"');
+        }
+        return $c;
+    }
+
+    /** IMAP search criteria: everything, or the text in sender, recipient, subject (and body); optionally one label and filters. */
     private function searchCriteria(?string $search): array
     {
-        $label = $this->keyword !== null ? ['KEYWORD', $this->keyword] : [];
+        $base = [...($this->keyword !== null ? ['KEYWORD', $this->keyword] : []), ...self::filterCriteria($this->filters)];
         $search = trim((string) $search);
         if ($search === '') {
-            return $label ?: ['ALL'];
+            return $base ?: ['ALL'];
         }
         $q = $this->imapString($search);
-        return [...$label, ...($this->searchInBody
+        return [...$base, ...($this->searchInBody
             ? ['OR', 'OR', 'OR', 'FROM', $q, 'TO', $q, 'SUBJECT', $q, 'BODY', $q]
             : ['OR', 'OR', 'FROM', $q, 'TO', $q, 'SUBJECT', $q])];
     }

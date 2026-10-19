@@ -46,11 +46,11 @@ export default {
   },
 
   list: {
+    loadMore: 'Load more messages ({shown} of {total})',
     empty: 'No messages in this folder.',
     emptySearch: 'Nothing found for this search.',
     search: 'Search mail',
     refresh: 'Refresh',
-    loadMore: 'Load more',
     noSubject: '(no subject)',
     sort: 'Sort',
     select: 'Select',
@@ -433,6 +433,12 @@ export default {
     conversationsHint: 'Replies are kept together, like in Gmail. Works when sorting by date (newest first).',
     language: 'Language',
     languageAuto: 'Automatic (browser)',
+    pageSize: 'Messages to load at a time',
+    pageSizeHint: 'The list first shows this many messages; the rest loads as you scroll down. Fewer is faster and uses less data.',
+    pageSizeMobile: 'Phone and tablet',
+    pageSizeDesktop: 'Computer',
+    thisDevice: 'this device',
+    messagesN: '{n} messages',
     pollSeconds: 'Check for new mail',
     seconds: '{n} seconds',
     minutes: '{n} minutes',
@@ -543,6 +549,16 @@ export default {
     resizeHint: 'Drag to change the width, double-click for the default width',
     resizeSidebar: 'Width of the folder column',
     resizeList: 'Width of the message list',
+  },
+
+  update: {
+    ready: 'A new version of Postvak is available.',
+    refresh: 'Refresh',
+    version: 'Postvak {version}',
+    serverHas: 'The server already has version {version}',
+    check: 'Check for updates',
+    loading: 'Loading the new version…',
+    upToDate: 'You have the latest version',
   },
 
   appearance: {

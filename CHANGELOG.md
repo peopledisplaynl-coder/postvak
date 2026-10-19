@@ -3,6 +3,25 @@
 All notable changes to Postvak. The format follows [Keep a Changelog](https://keepachangelog.com/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-10-19
+
+### Added
+- Settings → General → "Messages to load at a time", separately for phone/tablet (default 25) and computer
+  (default 50). The rest loads as you scroll; a "Load more messages (x of y)" button sits at the end of the list.
+
+### Fixed
+- Checking for new mail no longer shrinks the list back to the first page after you scrolled further.
+
+## [1.4.1] - 2026-10-18
+
+### Fixed
+- The installed app (iPhone/iPad home screen, Android, desktop) now looks for a new version every time it comes to
+  the foreground and every 30 minutes, and switches to it right away (or offers "Refresh" while you are writing).
+  Before, iOS kept showing the old version for a long time.
+
+### Added
+- Settings → General shows the version and has "Check for updates".
+
 ## [1.4.0] - 2026-10-18
 
 ### Added
@@ -167,6 +186,8 @@ First public release.
 - First version: login with mailbox credentials, multiple accounts, swipe actions with undo,
   sanitised reader, composer, settings, responsive layout, dark mode, PWA, FTP deploy.
 
+[1.5.0]: ../../releases/tag/v1.5.0
+[1.4.1]: ../../releases/tag/v1.4.1
 [1.4.0]: ../../releases/tag/v1.4.0
 [1.3.0]: ../../releases/tag/v1.3.0
 [1.2.1]: ../../releases/tag/v1.2.1

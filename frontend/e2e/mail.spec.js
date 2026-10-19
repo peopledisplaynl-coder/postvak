@@ -196,3 +196,21 @@ test('signature with a logo', async ({ page }) => {
   await page.locator('input[type=file][accept^="image/"]').setInputFiles('e2e/logo.png')
   await expect(editor.locator('img[src^="blob:"]')).toHaveCount(1)
 })
+
+test('phones load fewer messages and the rest when scrolling', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'the phone setting (25) is below the demo inbox size; computers load 50')
+  await login(page)
+  const more = page.getByRole('button', { name: /Meer berichten laden/ })
+  await expect(more).toBeVisible()
+  const first = await rows(page).count()
+  expect(first).toBeLessThanOrEqual(25)
+  await more.scrollIntoViewIfNeeded()
+  await expect.poll(() => rows(page).count()).toBeGreaterThan(first)
+
+  // Setting 10 per page: the list starts over with 10.
+  await page.goto('/settings')
+  const select = page.locator('select').filter({ has: page.locator('option[value="10"]') }).first()
+  await select.selectOption('10')
+  await page.goBack()
+  await expect.poll(() => rows(page).count()).toBeLessThanOrEqual(10)
+})

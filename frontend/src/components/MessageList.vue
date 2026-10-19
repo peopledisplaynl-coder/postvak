@@ -26,7 +26,7 @@ let observer
 onMounted(() => {
   observer = new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting) mail.loadMore()
-  }, { root: scroller.value, rootMargin: '400px' })
+  }, { root: scroller.value, rootMargin: '150px' })
   if (sentinel.value) observer.observe(sentinel.value)
 })
 onBeforeUnmount(() => observer?.disconnect())
@@ -309,6 +309,11 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
 
       <div ref="sentinel" class="h-px" />
       <p v-if="mail.loadingMore" class="py-4 text-center text-sm text-muted">…</p>
+      <div v-else-if="mail.hasMore && !mail.loading && mail.messages.length" class="py-3 text-center">
+        <button class="rounded-xl px-4 py-2 text-sm text-accent hover:bg-sunken" @click="mail.loadMore()">
+          {{ t('list.loadMore', { shown: mail.messages.length, total: mail.total }) }}
+        </button>
+      </div>
     </div>
 
     <FolderPicker v-if="picking" :account-id="pickAccount" :exclude="mail.folderPath" :count="mail.selected.length" @close="picking = false" @pick="moveSelected" />

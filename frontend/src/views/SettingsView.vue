@@ -3,13 +3,14 @@ import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
 import AccountForm from '../components/AccountForm.vue'
+import { appState, checkForUpdate, applyUpdate } from '../appUpdate.js'
 import CalendarSettings from '../components/CalendarSettings.vue'
 import RulesSettings from '../components/RulesSettings.vue'
 import AppearanceSettings from '../components/AppearanceSettings.vue'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
 import { api } from '../api/client.js'
-import { useMail } from '../stores/mail.js'
+import { useMail, isSmallDevice } from '../stores/mail.js'
 import { folderLabel, folderIcon, folderOwnName } from '../folders.js'
 import { t, locale, languageNames } from '../i18n/index.js'
 import { pushSupport, currentSubscription, enablePush, disablePush, sendTestPush } from '../push.js'
@@ -27,9 +28,28 @@ const editing = ref(null) // account id, 'new' or null
 const swipeActions = ['archive', 'trash', 'junk', 'snooze', 'read', 'flag', 'none']
 const actionColor = { archive: 'var(--color-archive)', trash: 'var(--color-danger)', junk: 'var(--color-junk)', snooze: 'var(--color-snooze)', read: 'var(--color-read)', flag: 'var(--color-flag)', none: 'var(--color-muted)' }
 
+// ---- version and updates
+const appVersion = __APP_VERSION__
+const serverVersion = ref(null)
+api.get('/health').then((h) => (serverVersion.value = h?.version ?? null)).catch(() => {})
+
+async function checkUpdates() {
+  const waiting = await checkForUpdate()
+  const health = await api.get('/health').catch(() => null)
+  serverVersion.value = health?.version ?? serverVersion.value
+  if (waiting || (serverVersion.value && serverVersion.value !== appVersion)) {
+    toasts.show(t('update.loading'))
+    setTimeout(() => (waiting ? applyUpdate() : location.reload()), 600)
+  } else {
+    toasts.show(t('update.upToDate'))
+  }
+}
+
 async function set(key, value) {
   try {
     await session.updateSettings({ [key]: value })
+    // A new page size takes effect at once (the list starts over with the new size).
+    if (key.startsWith('page_size') && mail.accountId !== null) mail.loadMessages({ silent: true, restart: true })
   } catch (e) {
     toasts.error(t('toast.failed', { msg: e.message }))
   }
@@ -297,6 +317,11 @@ async function logout() {
 }
 
 const pollOptions = [30, 60, 120, 300, 600]
+const pageSizeOptions = [10, 15, 25, 50, 100]
+const pageSizeDevices = computed(() => [
+  { key: 'page_size_mobile', label: 'settings.pageSizeMobile', fallback: 25, current: isSmallDevice() },
+  { key: 'page_size', label: 'settings.pageSizeDesktop', fallback: 50, current: !isSmallDevice() },
+])
 </script>
 
 <template>
@@ -337,6 +362,21 @@ const pollOptions = [30, 60, 120, 300, 600]
             </option>
           </select>
         </label>
+        <div class="px-4 py-3">
+          <p>{{ t('settings.pageSize') }}</p>
+          <p class="mb-2 text-sm text-muted">{{ t('settings.pageSizeHint') }}</p>
+          <div class="space-y-2">
+            <label v-for="d in pageSizeDevices" :key="d.key" class="flex items-center justify-between gap-4">
+              <span class="text-sm">
+                {{ t(d.label) }}
+                <span v-if="d.current" class="ml-1 inline-block whitespace-nowrap rounded-full bg-sunken px-2 py-0.5 text-xs text-muted">{{ t('settings.thisDevice') }}</span>
+              </span>
+              <select :value="session.settings[d.key] ?? d.fallback" class="rounded-lg bg-sunken px-3 py-1.5" @change="set(d.key, Number($event.target.value))">
+                <option v-for="n in pageSizeOptions" :key="n" :value="n">{{ t('settings.messagesN', { n }) }}</option>
+              </select>
+            </label>
+          </div>
+        </div>
         <label v-if="session.accounts.length > 1" class="flex items-center justify-between gap-4 px-4 py-3">
           <span>{{ t('settings.unifiedInbox') }}</span>
           <input type="checkbox" class="size-5 accent-accent" :checked="session.settings.unified_inbox" @change="set('unified_inbox', $event.target.checked)" />
@@ -363,12 +403,23 @@ const pollOptions = [30, 60, 120, 300, 600]
           <input type="checkbox" class="size-5 accent-accent" :checked="session.settings.mark_read_on_open" @change="set('mark_read_on_open', $event.target.checked)" />
         </label>
       </div>
-      <div v-if="tab === 'general'" class="mt-6 flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-line">
-        <span class="min-w-0 truncate text-muted">{{ session.user?.login_email }}</span>
-        <button class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 font-medium text-danger hover:bg-danger/10" @click="logout">
-          <AppIcon name="logout" :size="18" />
-          {{ t('actions.logout') }}
-        </button>
+      <div v-if="tab === 'general'" class="mt-6 space-y-3">
+        <div class="flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-line">
+          <span class="min-w-0 truncate text-muted">{{ session.user?.login_email }}</span>
+          <button class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 font-medium text-danger hover:bg-danger/10" @click="logout">
+            <AppIcon name="logout" :size="18" />
+            {{ t('actions.logout') }}
+          </button>
+        </div>
+        <div class="flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-line">
+          <span class="min-w-0">
+            {{ t('update.version', { version: appVersion }) }}
+            <span v-if="serverVersion && serverVersion !== appVersion" class="block text-sm text-flag">{{ t('update.serverHas', { version: serverVersion }) }}</span>
+          </span>
+          <button class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm ring-1 ring-line hover:bg-sunken disabled:opacity-60" :disabled="appState.checking" @click="checkUpdates">
+            <AppIcon name="refresh" :size="16" :class="appState.checking ? 'animate-spin' : ''" />{{ t('update.check') }}
+          </button>
+        </div>
       </div>
 
       <!-- Swipe -->

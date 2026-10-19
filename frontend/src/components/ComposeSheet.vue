@@ -6,6 +6,7 @@ import RecipientInput from './RecipientInput.vue'
 import RichEditor from './RichEditor.vue'
 import TimePicker from './TimePicker.vue'
 import { api } from '../api/client.js'
+import { appState } from '../appUpdate.js'
 import { useSession } from '../stores/session.js'
 import { useMail } from '../stores/mail.js'
 import { useToasts } from '../stores/toasts.js'
@@ -197,6 +198,10 @@ async function openDraft(summary) {
 }
 
 // ---- autosave
+
+// While writing, a new app version waits (a toast offers to refresh).
+appState.composing++
+onBeforeUnmount(() => appState.composing--)
 
 // ---- templates (reusable texts)
 const templates = ref(null)

@@ -5,13 +5,35 @@ import { t, locale } from '../i18n/index.js'
 import { useSession } from './session.js'
 import { useToasts } from './toasts.js'
 
-const PER_PAGE = 50
+/** Phones and tablets (small screen or touch) can load fewer messages per page than a computer. */
+export function isSmallDevice() {
+  return typeof matchMedia === 'function' && matchMedia('(max-width: 1023px), (pointer: coarse)').matches
+}
+
+/** How many messages one page of the list holds (settings "page_size" / "page_size_mobile"). */
+export function pageSize(settings = useSession().settings) {
+  const n = Number(isSmallDevice() ? settings.page_size_mobile ?? 25 : settings.page_size ?? 50)
+  return Math.min(100, Math.max(10, Number.isFinite(n) ? n : 50))
+}
 
 /** The id "all" stands for the unified inbox (the inboxes of every account). */
 export const ALL = 'all'
 
 /** Unique key of a message in a list: the same uid can exist in two accounts. */
 export const msgKey = (m) => `${m.account_id}:${m.uid}`
+
+/**
+ * Messages of the old list that come after the refreshed first page (so a refresh does not throw away what was
+ * scrolled in). Null when the first page no longer overlaps the old list (then the list starts over).
+ */
+export function olderThan(old, fresh) {
+  if (!fresh.length) return null
+  const freshKeys = new Set(fresh.map(msgKey))
+  const lastFresh = msgKey(fresh[fresh.length - 1])
+  const idx = old.findIndex((m) => msgKey(m) === lastFresh)
+  if (idx < 0) return null
+  return old.slice(idx + 1).filter((m) => !freshKeys.has(msgKey(m)))
+}
 
 /** A list row is a message, or a conversation (row.thread.uids = all its messages in this folder). */
 export const uidsOf = (m) => m.thread?.uids ?? [m.uid]
@@ -45,6 +67,7 @@ export const useMail = defineStore('mail', {
     messages: [],
     total: 0,
     page: 1,
+    perPage: 50,          // page size used for the current list (fixed until the list is reloaded)
     loading: false,
     loadingMore: false,
     search: '',
@@ -108,7 +131,7 @@ export const useMail = defineStore('mail', {
 
     listRequest(page) {
       const query = {
-        page, per_page: PER_PAGE, q: this.search, sort: this.sort,
+        page, per_page: this.perPage, q: this.search, sort: this.sort,
         threads: this.wantThreads ? 1 : undefined,
         body: this.search && this.searchBody ? 1 : undefined,
         label: this.labelFilter || undefined,
@@ -118,17 +141,26 @@ export const useMail = defineStore('mail', {
         : api.get(`/accounts/${this.accountId}/messages`, { folder: this.folderPath, ...query })
     },
 
-    async loadMessages({ silent = false } = {}) {
+    async loadMessages({ silent = false, restart = false } = {}) {
       if (!silent) this.loading = true
       const requested = `${this.accountId}:${this.folderPath}:${this.search}:${this.labelFilter}`
       try {
+        // A silent refresh (polling) keeps the page size and the messages scrolled in so far.
+        const keep = silent && !restart && this.page > 1
+        if (!keep) this.perPage = pageSize()
         const data = await this.listRequest(1)
         // Ignore the answer if the user switched folder in the meantime.
         if (requested !== `${this.accountId}:${this.folderPath}:${this.search}:${this.labelFilter}`) return
         // Do not resurrect messages that are waiting to be archived/deleted/moved.
-        this.messages = (data?.messages ?? []).filter((m) => !this.pending.has(pendingKey(m)))
+        const fresh = (data?.messages ?? []).filter((m) => !this.pending.has(pendingKey(m)))
+        const rest = keep ? olderThan(this.messages, fresh) : null
+        if (rest) {
+          this.messages = [...fresh, ...rest]
+        } else {
+          this.messages = fresh
+          this.page = 1
+        }
         this.total = data?.total ?? this.messages.length
-        this.page = 1
         for (const err of data?.errors ?? []) {
           if (!silent) useToasts().error(t('toast.accountFailed', { email: err.email }))
         }

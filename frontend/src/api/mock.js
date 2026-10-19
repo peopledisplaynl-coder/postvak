@@ -52,7 +52,7 @@ const accounts = [
 let settings = {
   swipe_left: 'trash', swipe_right: 'archive', confirm_delete: false, undo_seconds: 5,
   theme: 'system', density: 'comfortable', show_images: 'ask', reading_pane: 'right',
-  poll_seconds: 60, unified_inbox: true, mark_read_on_open: true, sort: 'date_desc', accent: 'indigo', text_size: 'normal',
+  poll_seconds: 60, unified_inbox: true, mark_read_on_open: true, sort: 'date_desc', accent: 'indigo', text_size: 'normal', page_size: 50, page_size_mobile: 25,
   labels: [['$label1', '#D23F3F'], ['$label2', '#E07B1A'], ['$label3', '#0F8A5F'], ['$label4', '#2C7DA0'], ['$label5', '#7A5AC8']].map(([key, color]) => ({ key, name: '', color })),
 }
 

@@ -8,12 +8,15 @@ import { useMail } from './stores/mail.js'
 import { useOutbox } from './stores/outbox.js'
 import { useToasts } from './stores/toasts.js'
 import { t } from './i18n/index.js'
+import { startUpdates } from './appUpdate.js'
 import './style.css'
 
 const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
 app.use(router)
+
+startUpdates()
 
 // Session expired on the server: back to the login screen.
 setUnauthorizedHandler(() => {

@@ -89,6 +89,13 @@ users, linked accounts, preferences and contacts.
 - `ComposeSheet` is loaded on demand (`defineAsyncComponent`), so the editor code is not part of the
   initial bundle.
 
+## App updates (PWA)
+
+- The service worker (vite-plugin-pwa, `registerType: 'prompt'`) is registered in `frontend/src/appUpdate.js`. Installed
+  apps rarely restart (iOS home screen), so it calls `registration.update()` when the app becomes visible and every
+  30 minutes. A waiting version is activated at once (skip waiting + reload) unless a composer is open; then a toast
+  offers "Refresh". `index.html` and `sw.js` are served with `Cache-Control: no-cache`.
+
 ## Background jobs and push notifications
 
 - `backend/cron.php` (CLI) runs `Cron\CronRunner` every few minutes (host's cron / Plesk scheduled

@@ -47,11 +47,11 @@ export default {
   },
 
   list: {
+    loadMore: 'Meer berichten laden ({shown} van {total})',
     empty: 'Geen berichten in deze map.',
     emptySearch: 'Niets gevonden voor deze zoekopdracht.',
     search: 'Zoeken in mail',
     refresh: 'Vernieuwen',
-    loadMore: 'Meer laden',
     noSubject: '(geen onderwerp)',
     sort: 'Sorteren',
     select: 'Selecteren',
@@ -434,6 +434,12 @@ export default {
     conversationsHint: 'Antwoorden staan bij elkaar, zoals in Gmail. Werkt bij sorteren op datum (nieuwste eerst).',
     language: 'Taal',
     languageAuto: 'Automatisch (browser)',
+    pageSize: 'Berichten per keer laden',
+    pageSizeHint: 'De lijst toont eerst dit aantal berichten; de rest laadt als je naar beneden scrolt. Minder berichten is sneller en scheelt data.',
+    pageSizeMobile: 'Telefoon en tablet',
+    pageSizeDesktop: 'Computer',
+    thisDevice: 'dit apparaat',
+    messagesN: '{n} berichten',
     pollSeconds: 'Controleren op nieuwe mail',
     seconds: '{n} seconden',
     minutes: '{n} minuten',
@@ -544,6 +550,16 @@ export default {
     resizeHint: 'Sleep om de breedte aan te passen, dubbelklik voor de standaardbreedte',
     resizeSidebar: 'Breedte van de mappenkolom',
     resizeList: 'Breedte van de berichtenlijst',
+  },
+
+  update: {
+    ready: 'Er is een nieuwe versie van Postvak.',
+    refresh: 'Vernieuwen',
+    version: 'Postvak {version}',
+    serverHas: 'Op de server staat al versie {version}',
+    check: 'Op updates controleren',
+    loading: 'Nieuwe versie wordt geladen…',
+    upToDate: 'Je hebt de nieuwste versie',
   },
 
   appearance: {

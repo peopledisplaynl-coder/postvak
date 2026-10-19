@@ -33,6 +33,8 @@ final class SettingsRepository
         'language'         => 'auto',          // auto (browser) | nl | en
         'accent'           => 'indigo',        // colour of buttons and highlights
         'text_size'        => 'normal',        // small | normal | large
+        'page_size'        => 50,              // messages per page in the list (computer)
+        'page_size_mobile' => 25,              // same on a phone or tablet
         // Labels = IMAP keywords. The first five use Thunderbird's keywords, so they show there too.
         'labels'           => [
             ['key' => '$label1', 'name' => '', 'color' => '#D23F3F'],   // Important
@@ -63,6 +65,8 @@ final class SettingsRepository
         'language'          => ['enum', ['auto', 'nl', 'en']],
         'accent'            => ['enum', self::ACCENTS],
         'text_size'         => ['enum', ['small', 'normal', 'large']],
+        'page_size'         => ['int', 10, 100],
+        'page_size_mobile'  => ['int', 10, 100],
         'labels'            => ['labels'],
     ];
 

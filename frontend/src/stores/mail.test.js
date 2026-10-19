@@ -76,3 +76,17 @@ describe('mail store: archive/delete with undo', () => {
     expect(uidsOf(msg(4, { thread: { uids: [4, 2] } }))).toEqual([4, 2])
   })
 })
+
+describe('olderThan: a refresh keeps what was scrolled in', async () => {
+  const { olderThan } = await import('./mail.js')
+  const list = (...uids) => uids.map((u) => msg(u))
+  it('keeps the older messages after the new first page', () => {
+    const old = list(10, 9, 8, 7, 6, 5)
+    const fresh = list(11, 10, 9) // a new message arrived
+    expect(olderThan(old, fresh).map((m) => m.uid)).toEqual([8, 7, 6, 5])
+  })
+  it('drops nothing twice and starts over when the pages no longer overlap', () => {
+    expect(olderThan(list(5, 4), list(9, 8))).toBeNull()
+    expect(olderThan(list(5, 4), [])).toBeNull()
+  })
+})

@@ -1,15 +1,22 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // Build output goes straight into the backend's public folder, next to /api.
+// The version shown under Settings (and compared with the server's).
+const version = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: [
     vue(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // Registered in src/appUpdate.js: checks for updates when the app comes to the foreground.
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['icon.svg', 'badge-96.png', 'push-sw.js'],
       manifest: {
         name: 'Postvak',
@@ -27,7 +34,7 @@ export default defineConfig({
       },
       workbox: {
         // Never cache API calls: mail must always come from the server.
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/dav\//, /^\/\.well-known\//, /^\/install\.php/],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         // Push notifications: handled in public/push-sw.js.
         importScripts: ['push-sw.js'],

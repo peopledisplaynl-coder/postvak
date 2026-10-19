@@ -1,12 +1,12 @@
 <script setup>
 import AppIcon from './AppIcon.vue'
 import { ABOUT, CREDITS } from '../about.js'
-import { t } from '../i18n/index.js'
+import { t, language } from '../i18n/index.js'
 
 /** Settings → About: what Postvak is, who makes it, licence, links and credits. */
 const version = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : ''
 const links = [
-  { label: 'about.manual', href: ABOUT.manual },
+  { label: 'about.manual', href: ABOUT.manual[language()] ?? ABOUT.manual.en },
   { label: 'about.website', href: ABOUT.website },
   { label: 'about.whatsNew', href: `${ABOUT.source}/releases` },
   { label: 'about.source', href: ABOUT.source },

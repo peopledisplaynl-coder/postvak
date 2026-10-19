@@ -94,7 +94,7 @@ export default {
     confirmRemove: 'Remove {name}? The link will stop working.',
   },
   about: {
-    manual: 'User manual (Dutch)',
+    manual: 'User guide',
     version: 'Version {version}',
     tagline: 'Modern webmail for your own hosting server. Mail, calendar, tasks and contacts in one place, on your computer, tablet and phone.',
     madeBy: 'Made by',

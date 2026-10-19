@@ -29,7 +29,9 @@ Read `docs/ARCHITECTURE.md` and `docs/ROADMAP.md` before larger changes.
 - `npm run build`: builds into `backend/public`.
 - Tests: `php backend/tests/run.php`, `npm --prefix frontend test`, `npm --prefix frontend run test:e2e` (demo mode).
 - Release: bump `frontend/package.json` + `POSTVAK_VERSION` (backend/bootstrap.php), add a CHANGELOG entry, tag `vX.Y.Z` (CI builds the zip via `scripts/release.mjs`).
-- Screenshots: start the demo on :5174, then `node scripts/screenshots.mjs`.
+- Screenshots: start the demo on :5174, then `node scripts/screenshots.mjs` (README) and
+  `node scripts/manual-screenshots.mjs` (user guides). PDF/Word guides: `python3 scripts/build-manual.py`.
+- User guides: `docs/HANDLEIDING.md` (Dutch) and `docs/USER-GUIDE.md` (English); keep both in step with new features.
 - PHP lint: `find backend -name '*.php' -not -path '*/vendor/*' -exec php -l {} \;`
 
 ## Conventions

@@ -3,6 +3,20 @@
 All notable changes to Postvak. The format follows [Keep a Changelog](https://keepachangelog.com/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.6.4] - 2026-10-19
+
+### Fixed
+- Deleting, archiving or moving the open message from the list (hover buttons, swiping, dragging, several at
+  once) now also closes it in the reading pane, as the buttons in the message itself already did.
+
+## [1.6.3] - 2026-10-19
+
+### Added
+- English user guide: [docs/USER-GUIDE.md](docs/USER-GUIDE.md), with English screenshots. Settings → About links to
+  the guide in the interface language.
+- Both guides as PDF and Word in `docs/manual/`, attached to every release. `python3 scripts/build-manual.py`
+  makes them again (needs pandoc and LibreOffice); `node scripts/manual-screenshots.mjs` makes the screenshots.
+
 ## [1.6.2] - 2026-10-19
 
 ### Added
@@ -228,6 +242,8 @@ First public release.
 - First version: login with mailbox credentials, multiple accounts, swipe actions with undo,
   sanitised reader, composer, settings, responsive layout, dark mode, PWA, FTP deploy.
 
+[1.6.4]: ../../releases/tag/v1.6.4
+[1.6.3]: ../../releases/tag/v1.6.3
 [1.6.2]: ../../releases/tag/v1.6.2
 [1.6.1]: ../../releases/tag/v1.6.1
 [1.6.0]: ../../releases/tag/v1.6.0

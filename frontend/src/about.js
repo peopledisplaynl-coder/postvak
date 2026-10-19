@@ -3,7 +3,11 @@ export const ABOUT = {
   maker: 'PeopleDisplay',
   website: 'https://peopledisplay.nl',
   source: 'https://github.com/peopledisplaynl-coder/postvak',
-  manual: 'https://github.com/peopledisplaynl-coder/postvak/blob/main/docs/HANDLEIDING.md',
+  // User manual per interface language (others get the English one).
+  manual: {
+    nl: 'https://github.com/peopledisplaynl-coder/postvak/blob/main/docs/HANDLEIDING.md',
+    en: 'https://github.com/peopledisplaynl-coder/postvak/blob/main/docs/USER-GUIDE.md',
+  },
   license: 'MIT',
   year: 2026,
 }

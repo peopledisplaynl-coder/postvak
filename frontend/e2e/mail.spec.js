@@ -274,3 +274,20 @@ test('a large file goes as a download link', async ({ page }) => {
   await page.evaluate(() => { history.pushState({}, '', '/settings/privacy'); dispatchEvent(new PopStateEvent('popstate')) })
   await expect(page.getByRole('link', { name: 'presentatie.mov' })).toBeVisible()
 })
+
+test('deleting the open message from the list also closes the reader', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'hover buttons are a desktop feature')
+  await login(page)
+  const first = rows(page).first()
+  const count = await rows(page).count()
+  await first.locator('[role=button]').click()
+  await expect(page).toHaveURL(/uid=/)
+  await first.hover()
+  await first.getByTitle('Verwijderen').click()
+  await expect(page).not.toHaveURL(/uid=/)
+  await expect(page.locator('article h2')).toHaveCount(0)
+  await expect.poll(() => rows(page).count()).toBe(count - 1)
+  // Undo puts it back in the list.
+  await page.getByRole('button', { name: 'Ongedaan maken' }).click()
+  await expect.poll(() => rows(page).count()).toBe(count)
+})

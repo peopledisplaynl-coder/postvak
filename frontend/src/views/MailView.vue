@@ -52,6 +52,11 @@ watch([accountId, folder], ([a, f]) => {
   mail.open(a, f)
 }, { immediate: true })
 watch(target, (tg) => (mail.openKey = tg ? msgKey(tg) : null), { immediate: true })
+// The open message left the list (deleted, archived or moved from the list, by swiping, dragging or for several
+// at once): close the reader too, just like the buttons in the message itself do.
+watch(() => mail.openKey, (key) => {
+  if (key === null && target.value) closeMessage()
+})
 
 function navigate(target) {
   drawer.value = false

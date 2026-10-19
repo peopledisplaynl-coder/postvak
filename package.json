@@ -1,7 +1,7 @@
 {
   "name": "postvak",
   "private": true,
-  "version": "1.6.2",
+  "version": "1.6.4",
   "description": "Modern, mobile-friendly webmail for your own IMAP mailboxes",
   "license": "MIT",
   "type": "module",

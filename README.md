@@ -6,7 +6,7 @@ on your phone (PWA). No Node.js, no daemons, no SSH needed on the server.
 
 *Postvak* is Dutch for "mailbox".
 
-📖 **User manual (Dutch): [docs/HANDLEIDING.md](docs/HANDLEIDING.md)** · Installation: [English](docs/INSTALL.md) · [Nederlands](docs/INSTALL.nl.md)
+📖 **User guide: [English](docs/USER-GUIDE.md) · [Nederlands](docs/HANDLEIDING.md)** (also as PDF and Word under [Releases](../../releases/latest)) · Installation: [English](docs/INSTALL.md) · [Nederlands](docs/INSTALL.nl.md)
 
 <p align="center">
   <img src="docs/screenshots/desktop-light.png" width="720" alt="Desktop layout: folders, message list and reader">
@@ -144,7 +144,7 @@ frontend/             Vue 3 + Vite + Tailwind CSS 4
   src/i18n/           nl.js (reference) and en.js
   e2e/                Playwright tests
 scripts/              deploy (FTP), release zip, screenshots (README and manual), translation check
-docs/                 user manual (HANDLEIDING.md), architecture, roadmap, installation guides
+docs/                 user guide (USER-GUIDE.md, HANDLEIDING.md), architecture, roadmap, installation guides
 ```
 
 ## Contributing

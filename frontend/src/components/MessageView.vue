@@ -1,13 +1,15 @@
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import LabelMenu from './LabelMenu.vue'
+import ActionMenu from './ActionMenu.vue'
+import { messageActions, tidy, makeTask as makeTaskFrom } from '../messageActions.js'
 import { labelsOfMessage, labelName } from '../labels.js'
 import AppIcon from './AppIcon.vue'
 import FolderPicker from './FolderPicker.vue'
 import MessageBody from './MessageBody.vue'
 import QuickReply from './QuickReply.vue'
-import { useMail } from '../stores/mail.js'
+import { useMail, isSmallDevice } from '../stores/mail.js'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
 import { api } from '../api/client.js'
@@ -31,19 +33,36 @@ const toasts = useToasts()
 const router = useRouter()
 
 /** Mail → task: a task with a link back to this message. */
-async function makeTask() {
-  const s = summary.value
-  if (!s) return
-  try {
-    await api.post('/tasks', {
-      title: s.subject || t('list.noSubject'),
-      mail: { account_id: s.account_id, folder: s.folder, uid: s.uid, subject: s.subject, from: displayName(s.from) },
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    })
-    toasts.show(t('tasks.createdFromMail'), { action: { label: t('tasks.show'), run: () => router.push('/tasks') } })
-  } catch (e) {
-    toasts.error(t('toast.failed', { msg: e.message }))
-  }
+function makeTask() {
+  if (summary.value) makeTaskFrom(summary.value, router)
+}
+
+// ---- toolbar size: larger touch targets on phones and tablets
+const touch = ref(isSmallDevice())
+const onResize = () => (touch.value = isSmallDevice())
+onMounted(() => window.addEventListener('resize', onResize))
+onBeforeUnmount(() => window.removeEventListener('resize', onResize))
+const iconSize = computed(() => (touch.value ? 23 : 20))
+const btn = computed(() => (touch.value ? 'rounded-xl p-2.5' : 'rounded-lg p-2'))
+
+// ⋮ on small screens: the actions that do not fit in the bar
+const moreMenu = ref(null)
+// Actions already in the bar: on a phone archive/delete/unread, on a larger screen all icons.
+const PHONE_BAR = ['archive', 'trash', 'read', 'reply', 'replyAll', 'forward']
+const WIDE_BAR = [...PHONE_BAR, 'junk', 'unsnooze', 'snooze', 'move', 'task', 'labels', 'flag']
+function openMore(e) {
+  const rect = e.currentTarget.getBoundingClientRect()
+  const inBar = matchMedia('(min-width: 768px)').matches ? WIDE_BAR : PHONE_BAR
+  const all = messageActions({
+    messages: [summary.value],
+    extra: loaded.value ? [loaded.value] : [],
+    muted: !!(loaded.value?.muted ?? newestLoaded.value?.muted),
+    router,
+    onMove: () => (picking.value = true),
+    onMoreFromSender: (email) => { emit('back'); mail.searchFrom(email) },
+  })
+  const items = tidy(all.filter((item) => !item || !inBar.includes(item.id)))
+  moreMenu.value = { items, x: rect.right, y: rect.bottom + 4 }
 }
 
 const targetKey = computed(() => (props.target ? `${props.target.account_id}:${props.target.uid}` : null))
@@ -145,14 +164,14 @@ const fromLabel = (m) => (own(m) ? t('list.me') : displayName(m.from))
 // ---- toolbar (acts on the list row = the whole conversation in this folder)
 async function act(action) {
   if (!summary.value) return
-  const done = await mail.act(action, summary.value)
-  if (done && (action === 'archive' || action === 'trash' || action === 'junk')) emit('back')
+  // Removing the message closes the reader (or opens the next one): MailView watches the open message.
+  await mail.act(action, summary.value)
 }
 
 const picking = ref(false)
 function moveTo({ path, label }) {
   picking.value = false
-  if (summary.value && mail.moveTo([summary.value], path, label)) emit('back')
+  if (summary.value) mail.moveTo([summary.value], path, label)
 }
 
 // ---- scheduled / snoozed
@@ -185,7 +204,7 @@ async function scheduledAction(kind) {
 }
 
 function unsnooze() {
-  if (summary.value && mail.unsnooze([summary.value])) emit('back')
+  if (summary.value) mail.unsnooze([summary.value])
 }
 
 function reply(payload) {
@@ -195,33 +214,38 @@ function reply(payload) {
 
 <template>
   <section class="flex h-full min-h-0 flex-col bg-surface">
-    <header class="pt-safe flex items-center gap-1 border-b border-line px-2 py-2">
-      <button v-if="target" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :aria-label="t('actions.back')" @click="emit('back')">
-        <AppIcon name="back" />
+    <header class="pt-safe flex items-center gap-0.5 border-b border-line px-2 py-1.5 sm:gap-1 sm:py-2">
+      <button v-if="target" :class="btn" class="text-muted hover:bg-sunken hover:text-ink" :aria-label="t('actions.back')" @click="emit('back')">
+        <AppIcon name="back" :size="iconSize" />
       </button>
       <div class="flex-1" />
       <template v-if="summary">
-        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.archive')" @click="act('archive')"><AppIcon name="archive" /></button>
-        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-danger" :title="t('actions.trash')" @click="act('trash')"><AppIcon name="trash" /></button>
+        <!-- Always visible: archive, delete, unread (like Gmail on a phone). The rest: in ⋮ on small screens. -->
+        <button v-if="role !== 'archive'" :class="btn" class="text-muted hover:bg-sunken hover:text-ink" :title="t('actions.archive')" :aria-label="t('actions.archive')" @click="act('archive')"><AppIcon name="archive" :size="iconSize" /></button>
+        <button :class="btn" class="text-muted hover:bg-sunken hover:text-danger" :title="t('actions.trash')" :aria-label="t('actions.trash')" @click="act('trash')"><AppIcon name="trash" :size="iconSize" /></button>
         <button
           v-if="!['sent', 'drafts', 'scheduled'].includes(mail.folderRole)"
-          class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink"
+          :class="btn" class="text-muted hover:bg-sunken hover:text-ink max-md:hidden"
           :title="mail.folderRole === 'junk' ? t('actions.notJunk') : t('actions.junk')"
           @click="act('junk')"
         >
-          <AppIcon :name="mail.folderRole === 'junk' ? 'inbox' : 'junk'" />
+          <AppIcon :name="mail.folderRole === 'junk' ? 'inbox' : 'junk'" :size="iconSize" />
         </button>
-        <button v-if="role === 'snoozed'" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.unsnooze')" @click="unsnooze"><AppIcon name="inbox" /></button>
-        <button v-if="!['drafts', 'sent', 'scheduled'].includes(role)" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="role === 'snoozed' ? t('later.otherTime') : t('actions.snooze')" @click="mail.snoozeRequest = [summary]"><AppIcon name="clock" /></button>
-        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.move')" @click="picking = true"><AppIcon name="move" /></button>
-        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('tasks.fromMail')" @click="makeTask"><AppIcon name="task" /></button>
-        <LabelMenu v-if="session.settings.labels?.length && (summary || loaded)" :messages="summary ? [summary] : []" :extra="loaded ? [loaded] : []" />
-        <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('actions.markUnread')" @click="mail.setFlag(summary, 'seen', false); emit('back')"><AppIcon name="unread" /></button>
-        <button class="rounded-lg p-2 hover:bg-sunken" :class="summary.flagged ? 'text-flag' : 'text-muted hover:text-ink'" :title="t('actions.flag')" @click="mail.setFlag(summary, 'flagged', !summary.flagged)">
-          <AppIcon name="flag" :class="summary.flagged ? 'fill-current' : ''" />
+        <button v-if="role === 'snoozed'" :class="btn" class="text-muted hover:bg-sunken hover:text-ink max-md:hidden" :title="t('actions.unsnooze')" @click="unsnooze"><AppIcon name="inbox" :size="iconSize" /></button>
+        <button v-if="!['drafts', 'sent', 'scheduled'].includes(role)" :class="btn" class="text-muted hover:bg-sunken hover:text-ink max-md:hidden" :title="role === 'snoozed' ? t('later.otherTime') : t('actions.snooze')" @click="mail.snoozeRequest = [summary]"><AppIcon name="clock" :size="iconSize" /></button>
+        <button :class="btn" class="text-muted hover:bg-sunken hover:text-ink max-md:hidden" :title="t('actions.move')" @click="picking = true"><AppIcon name="move" :size="iconSize" /></button>
+        <button :class="btn" class="text-muted hover:bg-sunken hover:text-ink max-md:hidden" :title="t('tasks.fromMail')" @click="makeTask"><AppIcon name="task" :size="iconSize" /></button>
+        <LabelMenu v-if="session.settings.labels?.length && (summary || loaded)" class="max-md:hidden" :messages="summary ? [summary] : []" :extra="loaded ? [loaded] : []" />
+        <button :class="btn" class="text-muted hover:bg-sunken hover:text-ink" :title="t('actions.markUnread')" :aria-label="t('actions.markUnread')" @click="mail.setFlag(summary, 'seen', false); emit('back')"><AppIcon name="unread" :size="iconSize" /></button>
+        <button :class="btn" class="hover:bg-sunken max-md:hidden" :title="t('actions.flag')" @click="mail.setFlag(summary, 'flagged', !summary.flagged)">
+          <AppIcon name="flag" :size="iconSize" :class="summary.flagged ? 'fill-current text-flag' : 'text-muted hover:text-ink'" />
+        </button>
+        <button :class="btn" class="text-muted hover:bg-sunken hover:text-ink" :title="t('menu.more')" :aria-label="t('menu.more')" :aria-expanded="!!moreMenu" @click="openMore">
+          <AppIcon name="more" :size="iconSize" />
         </button>
       </template>
     </header>
+    <ActionMenu v-if="moreMenu" :items="moreMenu.items" :x="moreMenu.x" :y="moreMenu.y" align="right" @close="moreMenu = null" />
 
     <div v-if="!target" class="flex flex-1 items-center justify-center p-8 text-muted">
       {{ t('reader.select') }}

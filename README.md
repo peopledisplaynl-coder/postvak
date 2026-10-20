@@ -26,19 +26,27 @@ on your phone (PWA). No Node.js, no daemons, no SSH needed on the server.
 - Swipe to archive, delete, snooze or mark as spam on phone and tablet, with undo. Each user picks what left and right swipes do.
 - Conversation view (IMAP THREAD), including your own replies from Sent.
 - One inbox for all your accounts, or each account separately.
-- Multi-select, move to folder, drag & drop onto folders, create/rename/delete folders.
+- Multi-select, move to folder, drag & drop onto folders, right-click menu with all actions, create/rename/delete folders.
+- On phones the message bar keeps the three main actions large, the rest is under ⋮.
 - Search (subject and sender, optionally the message text) with filters: unread, starred, has attachment,
   period, more from this sender. Mark all as read, empty trash and spam.
 - The list loads a set number of messages at a time (separately for phone/tablet and computer) and the rest as you scroll.
 - Snooze: a message disappears and comes back to the inbox at the time you choose.
-- Attachment viewer for images and PDF, print view.
+- Optional inbox tabs (Primary, Promotions, Social, Updates), sorted by the mail server.
+- One-click unsubscribe from mailings, a warning on mail whose sender could not be verified, block a sender,
+  mute a conversation, view or download the original (.eml).
+- Attachments overview: every file in a folder at a glance. After deleting, open the next message if you like.
+- Offline reading per device: opened messages and the newest of each list stay readable without internet.
+- Attachment viewer for images and PDF, print view; mailbox storage shown in the sidebar.
 
 **Writing**
 - Rich text editor (headings, lists, links, colours, clean paste from Word), the quoted original kept intact.
 - Quick reply box under every message; drafts saved automatically, send later, undo send, address autocomplete.
 - Large files (over 10 MB, or more than the mail server accepts) go as a download link from your own server,
   valid for 30 days, uploaded in pieces so the host's upload limit does not matter.
-- Send from any of your accounts, each with its own signature (with a logo, sent as an embedded image); reusable templates.
+- Send from any of your accounts, each with one or more signatures (with a logo, sent as an embedded image); reusable templates.
+- "Remind me if nobody answers": the message comes back to your inbox after 1, 3 or 7 days without a reply.
+- Contact groups as recipients: type the group name and everyone in it is added.
 - Coloured labels (shared with Thunderbird), filter a folder on a label.
 
 **Sorting and away**
@@ -57,7 +65,8 @@ on your phone (PWA). No Node.js, no daemons, no SSH needed on the server.
 
 **Everything else**
 - Push notifications for new mail on phone and desktop (Web Push, no third-party service).
-- Contacts page with vCard import and export, synced with the contacts app on your phone (CardDAV).
+- Contacts like Google Contacts: photo, company and job title, several e-mail addresses and phone numbers, addresses,
+  birthdays (also in the calendar), websites and groups; vCard import and export; synced both ways with your phone (CardDAV).
 - Optional two-step verification (TOTP) with recovery codes and remembered devices.
 - Privacy by default: remote images blocked until you allow them (per message, sender or domain), mail HTML
   sanitised on the server and again in the browser, shown in a sandboxed frame.

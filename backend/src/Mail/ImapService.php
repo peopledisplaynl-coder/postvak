@@ -330,6 +330,89 @@ final class ImapService
         return array_map('intval', is_array($found) ? $found : []);
     }
 
+    /**
+     * Storage use of the mailbox (IMAP QUOTA, RFC 2087), or null when the server does not tell.
+     * @return array{used:int, limit:int}|null bytes
+     */
+    public function quota(): ?array
+    {
+        try {
+            $data = $this->client->getConnection()->getQuotaRoot('INBOX')->data();
+        } catch (Throwable) {
+            return null;
+        }
+        $tokens = [];
+        array_walk_recursive($data, static function ($v) use (&$tokens) {
+            foreach (preg_split('/[\s()]+/', (string) $v) ?: [] as $t) {
+                if ($t !== '') {
+                    $tokens[] = $t;
+                }
+            }
+        });
+        return self::parseQuota($tokens);
+    }
+
+    /** ["QUOTA", "\"User", "quota\"", "STORAGE", "1234", "51200"] → used/limit in bytes (STORAGE is in KiB). */
+    public static function parseQuota(array $tokens): ?array
+    {
+        foreach ($tokens as $i => $t) {
+            if (strcasecmp((string) $t, 'STORAGE') === 0 && isset($tokens[$i + 2]) && ctype_digit((string) $tokens[$i + 1]) && ctype_digit((string) $tokens[$i + 2])) {
+                $limit = (int) $tokens[$i + 2] * 1024;
+                return $limit > 0 ? ['used' => (int) $tokens[$i + 1] * 1024, 'limit' => $limit] : null;
+            }
+        }
+        return null;
+    }
+
+    /** UIDs of messages that answer the given Message-ID (In-Reply-To or References). */
+    public function repliesTo(string $folderPath, string $messageId): array
+    {
+        $folder = $this->folder($folderPath);
+        $this->client->openFolder($folder->path, true);
+        $id = $this->imapString($messageId);
+        $found = $this->client->getConnection()->search(['OR', 'HEADER', 'In-Reply-To', $id, 'HEADER', 'References', $id], IMAP::ST_UID)->validatedData();
+        return array_map('intval', is_array($found) ? $found : []);
+    }
+
+    /**
+     * Messages with attachments in a folder, newest first, with the attachments' names, types and sizes (from
+     * BODYSTRUCTURE, so nothing is downloaded). A search term matches sender or subject; $nameFilter keeps only
+     * attachments whose name contains it.
+     *
+     * @return array{total:int, page:int, per_page:int, items:array}
+     */
+    public function attachmentOverview(string $folderPath, int $page = 1, int $perPage = 25, ?string $search = null): array
+    {
+        $folder = $this->folder($folderPath);
+        $this->client->openFolder($folder->path, true);
+        $saved = $this->filters;
+        $this->filters = ['attachment' => true];
+        try {
+            $uids = $this->sortedUids('date_desc', $search);
+        } finally {
+            $this->filters = $saved;
+        }
+        $total = count($uids);
+        $pageUids = array_slice($uids, ($page - 1) * $perPage, $perPage);
+        $items = [];
+        if ($pageUids !== []) {
+            $raw = $this->client->getConnection()->requestAndResponse('UID FETCH', [implode(',', $pageUids), '(UID BODYSTRUCTURE)'], true)->data();
+            $structures = BodyStructure::parseFetch(array_filter((array) $raw, 'is_string'));
+            $summaries = [];
+            foreach ($this->summaries($folderPath, $pageUids) as $summary) {
+                $summaries[(int) $summary['uid']] = $summary;
+            }
+            foreach ($pageUids as $uid) {
+                $files = isset($structures[$uid]) ? BodyStructure::attachments($structures[$uid]) : [];
+                if ($files === [] || !isset($summaries[$uid])) {
+                    continue; // multipart/mixed without a real attachment, or deleted meanwhile
+                }
+                $items[] = ['message' => $summaries[$uid], 'attachments' => $files];
+            }
+        }
+        return ['total' => $total, 'page' => $page, 'per_page' => $perPage, 'items' => $items];
+    }
+
     /** Summaries (incl. message_id) of the given messages. */
     public function summaries(string $folderPath, array $uids): array
     {
@@ -745,7 +828,7 @@ final class ImapService
     private array $filters = [];
 
     /** Take the filters from the list request (?filter=unseen,flagged,attachment&since=30&from=a@b.nl). */
-    public function setFilters(?string $flags, mixed $sinceDays, ?string $from): void
+    public function setFilters(?string $flags, mixed $sinceDays, ?string $from, ?string $category = null): void
     {
         $f = [];
         foreach (explode(',', (string) $flags) as $flag) {
@@ -760,6 +843,9 @@ final class ImapService
         $from = trim((string) $from);
         if ($from !== '' && mb_strlen($from) <= 200 && preg_match('/^[\x20-\x7e]+$/', $from)) {
             $f['from'] = $from;
+        }
+        if (in_array($category, ['primary', 'promotions', 'social', 'updates'], true)) {
+            $f['category'] = $category;
         }
         $this->filters = $f;
     }
@@ -785,6 +871,9 @@ final class ImapService
             $from = str_replace(["\r", "\n"], ' ', (string) $f['from']);
             array_push($c, 'FROM', '"' . addcslashes($from, '"\\') . '"');
         }
+        if (!empty($f['category'])) {
+            array_push($c, ...MessageInsights::searchCriteria((string) $f['category']));
+        }
         return $c;
     }
 
@@ -803,7 +892,7 @@ final class ImapService
     }
 
     /** IMAP keywords that are not labels (set by mail programs for their own bookkeeping). */
-    private const SYSTEM_KEYWORDS = ['$forwarded', '$mdnsent', '$junk', '$notjunk', 'junk', 'nonjunk', 'notjunk', '$phishing', '$submitpending', '$submitted', '$hasattachment', '$hasnoattachment', '$answered', '$notphishing', '$autojunk', '$hastd'];
+    private const SYSTEM_KEYWORDS = ['$followup', '$forwarded', '$mdnsent', '$junk', '$notjunk', 'junk', 'nonjunk', 'notjunk', '$phishing', '$submitpending', '$submitted', '$hasattachment', '$hasnoattachment', '$answered', '$notphishing', '$autojunk', '$hastd'];
 
     /** Labels of a message: its keywords, without the system ones. @return string[] */
     public static function labelsFrom(array $rawFlags): array
@@ -906,6 +995,8 @@ final class ImapService
             'labels'          => self::labelsFrom($rawFlags),
             // Without fetching the body, multipart/mixed is a good indication of attachments.
             'has_attachments' => str_contains($contentType, 'multipart/mixed'),
+            'category'        => MessageInsights::category($rawHeader, $from['email'] ?? null),
+            'followup'        => isset($flags['$followup']),
         ];
     }
 

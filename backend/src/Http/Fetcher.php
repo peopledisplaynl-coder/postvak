@@ -34,6 +34,16 @@ final class Fetcher
         throw new RuntimeException('Too many redirects');
     }
 
+    /**
+     * POST a small form body (one-click unsubscribe, RFC 8058). Redirects are not followed.
+     * @return array{status:int, body:string, headers:array<string, string>}
+     */
+    public static function post(string $url, string $body, string $contentType = 'application/x-www-form-urlencoded', int $timeout = 15): array
+    {
+        [$host, $ip, $port] = self::check($url);
+        return self::request($url, $host, $ip, $port, 100_000, $timeout, ['Content-Type' => $contentType], 'POST', $body);
+    }
+
     /** webcal:// is how calendar links are often shared; it means https. */
     public static function normalize(string $url): string
     {
@@ -82,7 +92,7 @@ final class Fetcher
         return $origin . $dir . '/' . $location;
     }
 
-    private static function request(string $url, string $host, string $ip, int $port, int $maxBytes, int $timeout, array $headers): array
+    private static function request(string $url, string $host, string $ip, int $port, int $maxBytes, int $timeout, array $headers, string $method = 'GET', ?string $body = null): array
     {
         $lines = ['User-Agent: ' . self::USER_AGENT];
         foreach ($headers as $k => $v) {
@@ -94,6 +104,8 @@ final class Fetcher
             $ch = curl_init($url);
             curl_setopt_array($ch, [
                 CURLOPT_HTTPHEADER     => $lines,
+                CURLOPT_CUSTOMREQUEST  => $method,
+                ...($body !== null ? [CURLOPT_POSTFIELDS => $body] : []),
                 CURLOPT_FOLLOWLOCATION => false,
                 CURLOPT_PROTOCOLS      => CURLPROTO_HTTPS | CURLPROTO_HTTP,
                 CURLOPT_TIMEOUT        => $timeout,
@@ -126,7 +138,8 @@ final class Fetcher
         }
 
         $context = stream_context_create(['http' => [
-            'method' => 'GET', 'header' => implode("\r\n", $lines), 'timeout' => $timeout,
+            'method' => $method, 'header' => implode("\r\n", $lines), 'timeout' => $timeout,
+            ...($body !== null ? ['content' => $body] : []),
             'ignore_errors' => true, 'follow_location' => 0,
         ]]);
         $stream = @fopen($url, 'rb', false, $context);

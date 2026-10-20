@@ -146,11 +146,27 @@ function insertAboveSignature(html) {
   else ed.chain().insertContentAt(sigPos, html || '').run()
 }
 
+/** Replace the signature (from the "--" line to the end) with html, or remove it when html is empty. */
+function replaceSignature(html) {
+  const ed = editor.value
+  if (!ed) return
+  let sigPos = null
+  ed.state.doc.descendants((node, pos) => {
+    if (sigPos === null && node.type.name === 'paragraph' && node.textContent.trim() === '--') sigPos = pos
+    return sigPos === null
+  })
+  const end = ed.state.doc.content.size
+  let chain = ed.chain()
+  if (sigPos !== null) chain = chain.deleteRange({ from: sigPos, to: end })
+  if (html) chain = chain.insertContentAt(sigPos ?? end, html)
+  chain.run()
+}
+
 function focus(where = 'start') {
   editor.value?.commands.focus(where)
 }
 
-defineExpose({ setContent, getHtml, getText, focus, insertContent, insertAboveSignature })
+defineExpose({ setContent, getHtml, getText, focus, insertContent, insertAboveSignature, replaceSignature })
 </script>
 
 <template>

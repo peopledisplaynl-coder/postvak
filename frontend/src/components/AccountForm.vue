@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, defineAsyncComponent } from 'vue'
+import { ref, reactive, computed, defineAsyncComponent } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { api } from '../api/client.js'
 import { useSession } from '../stores/session.js'
@@ -35,10 +35,39 @@ const sigEditor = ref(null)
 const imageInput = ref(null)
 const uploading = ref(false)
 
+// Several signatures: {list: [{id, name, html}], new: id, reply: id}
+const sigs = reactive(JSON.parse(JSON.stringify(props.account?.signatures ?? { list: [], new: null, reply: null })))
+const newId = () => Math.random().toString(36).slice(2, 10)
+if (!sigs.list.length) sigs.list.push({ id: newId(), name: '', html: '' })
+const currentSig = ref(sigs.list[0].id)
+const cur = computed(() => sigs.list.find((x) => x.id === currentSig.value) ?? sigs.list[0])
+const sigLabel = (sig, i) => sig.name || t('signatures.numbered', { n: i + 1 })
+
 function onSignatureChange() {
   const html = sigEditor.value?.getHtml() ?? ''
   // An empty editor still gives "<p></p>": store nothing then.
-  form.signature_html = sigEditor.value?.getText().trim() || html.includes('<img') ? html : ''
+  cur.value.html = sigEditor.value?.getText().trim() || html.includes('<img') ? html : ''
+}
+function addSignature() {
+  const sig = { id: newId(), name: t('signatures.numbered', { n: sigs.list.length + 1 }), html: '' }
+  sigs.list.push(sig)
+  currentSig.value = sig.id
+}
+function removeSignature() {
+  if (!confirm(t('signatures.confirmDelete', { name: sigLabel(cur.value, sigs.list.indexOf(cur.value)) }))) return
+  const id = cur.value.id
+  sigs.list.splice(sigs.list.indexOf(cur.value), 1)
+  if (!sigs.list.length) sigs.list.push({ id: newId(), name: '', html: '' })
+  for (const k of ['new', 'reply']) if (sigs[k] === id) sigs[k] = null
+  currentSig.value = sigs.list[0].id
+}
+/** What is sent: only signatures with content; one signature and no choice made yet = for everything. */
+function signaturesPayload() {
+  const list = sigs.list.filter((x) => x.html.trim())
+  const ids = list.map((x) => x.id)
+  let { new: forNew, reply } = sigs
+  if (list.length === 1 && !ids.includes(forNew) && !ids.includes(reply)) forNew = reply = ids[0]
+  return { list, new: ids.includes(forNew) ? forNew : null, reply: ids.includes(reply) ? reply : null }
 }
 
 /** Scale an image down (a logo of 360 × 180 at most is plenty in a mail) and keep transparency. */
@@ -72,7 +101,7 @@ async function addImages(files) {
       const res = await api.upload('/signature-images', data)
       sigEditor.value?.insertContent(`<p><img src="${res.url}" alt=""></p>`)
     }
-    form.signature_html = sigEditor.value.getHtml()
+    cur.value.html = sigEditor.value.getHtml()
   } catch (e) {
     toasts.error(t('toast.failed', { msg: e.message }))
   } finally {
@@ -91,9 +120,11 @@ async function save() {
     if (!showServer.value) {
       for (const k of ['imap_host', 'imap_port', 'smtp_host', 'smtp_port']) delete data[k]
     }
+    delete data.signature_html
     if (isNew) await session.addAccount(data)
     else {
       delete data.email
+      data.signatures = signaturesPayload()
       await session.updateAccount(props.account.id, data)
     }
     toasts.show(t('toast.saved'))
@@ -130,9 +161,25 @@ const field = 'mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 ou
       </div>
     </div>
     <div v-if="!isNew">
-      <label class="text-sm font-medium">{{ t('settings.signature') }}</label>
-      <div class="mt-1 flex h-56 flex-col overflow-hidden rounded-xl border border-line bg-surface">
-        <RichEditor ref="sigEditor" :initial="form.signature_html" :placeholder="t('settings.signaturePlaceholder')" @update="onSignatureChange" @files="addImages" />
+      <label class="text-sm font-medium">{{ t('signatures.title') }}</label>
+      <!-- One tab per signature -->
+      <div class="mt-1 flex flex-wrap items-center gap-1.5">
+        <button
+          v-for="(sig, i) in sigs.list" :key="sig.id" type="button"
+          class="rounded-full px-3 py-1 text-sm ring-1 transition"
+          :class="sig.id === currentSig ? 'bg-accent-soft font-medium text-accent ring-accent/40' : 'text-muted ring-line hover:bg-sunken'"
+          @click="currentSig = sig.id"
+        >{{ sigLabel(sig, i) }}</button>
+        <button v-if="sigs.list.length < 10" type="button" class="rounded-full px-3 py-1 text-sm text-accent hover:bg-sunken" @click="addSignature">+ {{ t('signatures.add') }}</button>
+      </div>
+      <div class="mt-2 flex items-center gap-2">
+        <input v-model="cur.name" maxlength="50" :placeholder="t('signatures.namePlaceholder')" :aria-label="t('signatures.name')" :class="field" class="mt-0" />
+        <button v-if="sigs.list.length > 1 || cur.html" type="button" class="shrink-0 rounded-lg p-2 text-muted hover:bg-sunken hover:text-danger" :title="t('signatures.delete')" @click="removeSignature">
+          <AppIcon name="trash" :size="18" />
+        </button>
+      </div>
+      <div class="mt-2 flex h-56 flex-col overflow-hidden rounded-xl border border-line bg-surface">
+        <RichEditor :key="currentSig" ref="sigEditor" :initial="cur.html" :placeholder="t('settings.signaturePlaceholder')" @update="onSignatureChange" @files="addImages" />
       </div>
       <div class="mt-2 flex flex-wrap items-center gap-3">
         <button type="button" class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm ring-1 ring-line hover:bg-sunken disabled:opacity-60" :disabled="uploading" @click="imageInput.click()">
@@ -140,6 +187,23 @@ const field = 'mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 ou
         </button>
         <span class="text-xs text-muted">{{ t('settings.signatureImageHint') }}</span>
         <input ref="imageInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden" @change="addImages($event.target.files)" />
+      </div>
+      <!-- Which one is used by default -->
+      <div class="mt-3 grid gap-2 sm:grid-cols-2">
+        <label class="block text-sm">
+          <span class="text-muted">{{ t('signatures.forNew') }}</span>
+          <select v-model="sigs.new" :class="field">
+            <option :value="null">{{ t('signatures.none') }}</option>
+            <option v-for="(sig, i) in sigs.list" :key="sig.id" :value="sig.id">{{ sigLabel(sig, i) }}</option>
+          </select>
+        </label>
+        <label class="block text-sm">
+          <span class="text-muted">{{ t('signatures.forReply') }}</span>
+          <select v-model="sigs.reply" :class="field">
+            <option :value="null">{{ t('signatures.none') }}</option>
+            <option v-for="(sig, i) in sigs.list" :key="sig.id" :value="sig.id">{{ sigLabel(sig, i) }}</option>
+          </select>
+        </label>
       </div>
     </div>
 

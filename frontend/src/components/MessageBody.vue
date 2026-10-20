@@ -66,6 +66,29 @@ const senderDomain = computed(() => senderEmail.value.split('@')[1] ?? '')
 const ownAddress = computed(() => session.accounts.some((a) => a.email.toLowerCase() === senderEmail.value))
 
 const addingContact = ref(false)
+// ---- unsubscribe from a mailing list (List-Unsubscribe)
+const unsubscribing = ref(false)
+async function unsubscribe() {
+  if (!confirm(t('unsubscribe.confirm', { name: displayName(message.value.from) }))) return
+  unsubscribing.value = true
+  try {
+    const res = await api.post(`/accounts/${props.target.account_id}/messages/${props.target.uid}/unsubscribe`, { folder: props.target.folder })
+    if (res.done) {
+      toasts.show(t('unsubscribe.done', { name: displayName(message.value.from) }), { seconds: 6 })
+      message.value = { ...message.value, unsubscribe: false }
+    } else if (res.url) {
+      window.open(res.url, '_blank', 'noopener')
+      toasts.show(t('unsubscribe.page'), { seconds: 8 })
+    }
+  } catch (e) {
+    toasts.error(t('toast.failed', { msg: e.message }))
+  } finally {
+    unsubscribing.value = false
+  }
+}
+
+const followup = computed(() => !!(message.value && mail.byKey(`${props.target.account_id}:${props.target.uid}`)?.followup))
+
 /** Close the reader and list the other messages from this sender. */
 function moreFromSender() {
   const { uid: _, acc: __, ...rest } = route.query
@@ -201,6 +224,25 @@ defineExpose({ message, reload: load, print: printMessage })
     </p>
 
     <template v-else-if="message">
+      <!-- The sender is not who they claim to be (checked by the receiving mail server) -->
+      <div
+        v-if="message.authenticity?.level"
+        class="mb-4 flex gap-3 rounded-xl px-4 py-3 text-sm"
+        :class="message.authenticity.level === 'danger' ? 'bg-danger/10 text-danger' : 'bg-flag/10 text-ink'"
+        role="alert"
+      >
+        <AppIcon name="shield" :size="20" class="mt-0.5 shrink-0" />
+        <div>
+          <p class="font-semibold">{{ t(message.authenticity.level === 'danger' ? 'trust.dangerTitle' : 'trust.cautionTitle') }}</p>
+          <p v-for="r in message.authenticity.reasons" :key="r" class="mt-0.5" :class="message.authenticity.level === 'danger' ? 'text-danger/90' : 'text-muted'">{{ t(`trust.${r}`) }}</p>
+        </div>
+      </div>
+      <!-- Sent with "remind me if nobody answers" and no answer came -->
+      <div v-if="followup" class="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-accent-soft px-4 py-3 text-sm">
+        <AppIcon name="clock" :size="20" class="shrink-0 text-accent" />
+        <span class="min-w-0 flex-1">{{ t('followup.banner', { date: fullDate(message.date) }) }}</span>
+        <button class="rounded-lg bg-accent px-3 py-1.5 font-medium text-white" @click="reply('replyAll')">{{ t('followup.nudge') }}</button>
+      </div>
       <div class="flex items-start gap-3" :class="collapsible ? 'cursor-pointer' : ''" @click="collapsible && emit('collapse')">
         <span
           class="flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
@@ -218,6 +260,12 @@ defineExpose({ message, reload: load, print: printMessage })
           </p>
           <p class="text-muted">{{ fullDate(message.date) }}</p>
         </div>
+        <button
+          v-if="message.unsubscribe && !collapsible"
+          class="shrink-0 self-center rounded-full px-3 py-1 text-xs font-medium text-muted ring-1 ring-line hover:bg-sunken hover:text-ink disabled:opacity-50"
+          :disabled="unsubscribing"
+          @click.stop="unsubscribe"
+        >{{ t('unsubscribe.button') }}</button>
         <RouterLink
           v-if="senderEmail && !ownAddress"
           :to="{ path: '/settings/rules', query: { from: senderEmail, name: displayName(message.from), account: target.account_id } }"

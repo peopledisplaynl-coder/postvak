@@ -16,7 +16,7 @@ final class AccountRepository
         'imap_host', 'imap_port', 'imap_encryption',
         'smtp_host', 'smtp_port', 'smtp_encryption', 'username',
         'archive_folder', 'trash_folder', 'sent_folder', 'drafts_folder', 'junk_folder',
-        'signature_html', 'notify',
+        'signature_html', 'signatures', 'notify',
     ];
 
     public function forUser(int $userId): array
@@ -78,6 +78,22 @@ final class AccountRepository
         Database::run('DELETE FROM accounts WHERE id = ?', [$accountId]);
     }
 
+    /**
+     * The account's signatures: {list: [{id, name, html}], new: id|null, reply: id|null}. Accounts from before
+     * migration 015 have one (signature_html), used for new mail and replies.
+     */
+    public static function signatures(array $row): array
+    {
+        $data = !empty($row['signatures']) ? json_decode((string) $row['signatures'], true) : null;
+        if (is_array($data) && isset($data['list']) && is_array($data['list'])) {
+            return ['list' => array_values($data['list']), 'new' => $data['new'] ?? null, 'reply' => $data['reply'] ?? null];
+        }
+        $html = trim((string) ($row['signature_html'] ?? ''));
+        return $html === ''
+            ? ['list' => [], 'new' => null, 'reply' => null]
+            : ['list' => [['id' => 'main', 'name' => '', 'html' => $html]], 'new' => 'main', 'reply' => 'main'];
+    }
+
     /** Safe representation for the frontend (no password). */
     public static function toPublic(array $row): array
     {
@@ -88,6 +104,7 @@ final class AccountRepository
         $row['imap_port'] = (int) $row['imap_port'];
         $row['smtp_port'] = (int) $row['smtp_port'];
         $row['notify'] = (bool) ($row['notify'] ?? true);
+        $row['signatures'] = self::signatures($row);
         unset($row['notify_uidvalidity'], $row['notify_last_uid']);
         return $row;
     }

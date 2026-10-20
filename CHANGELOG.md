@@ -3,6 +3,45 @@
 All notable changes to Postvak. The format follows [Keep a Changelog](https://keepachangelog.com/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-10-20
+
+### Added
+- Inbox tabs like Gmail (Settings → General, off by default): Primary, Promotions, Social and Updates. The mail
+  server does the sorting, so counts and paging stay right.
+- One-click unsubscribe: mailings get an "Unsubscribe" button above the message (RFC 8058 one-click, otherwise a
+  mail to the list's unsubscribe address, otherwise the sender's page opens).
+- Warning for suspicious mail: a red or amber bar when the sender could not be verified (DMARC/SPF from your mail
+  server), when the sender name shows another address, or replies would go elsewhere.
+- Remind me if nobody answers: choose 1, 3 or 7 days when sending. Without a reply the message comes back to the
+  top of your inbox, starred, with a "Follow up" button. Database update 015 runs by itself.
+- Mute a conversation: new replies skip the inbox and go to the archive.
+- Block sender: from the ⋮ menu; makes a rule that sends their mail to the trash (undo possible).
+- Show the original message or download it as `.eml`.
+- Mailbox storage in the sidebar ("470 kB of 50 MB used"), when the mail server reports it; red when nearly full.
+- Contact groups as recipients: type the group name in To/Cc/Bcc and everyone in it is added.
+- Several signatures per account, with a default for new messages and one for replies; switch in the composer.
+- Attachments overview (sidebar → Attachments): every file in a folder, newest first, filter on documents or
+  images, search by sender or subject; a click opens the message.
+- Birthdays of your contacts in the calendar (can be switched off in Settings → Calendar).
+- After deleting or archiving: go back to the list, or open the next or previous message (Settings → General).
+- Offline reading (per device, Settings → General): messages you opened and the newest messages of your lists stay
+  readable without internet.
+
+## [1.7.0] - 2026-10-20
+
+### Added
+- Contacts like Google Contacts: photo, first and last name, nickname, company, job title and department, several
+  e-mail addresses and phone numbers with a type, addresses (with a map link), birthday (also without a year),
+  websites, groups (filter the list on a group) and notes. "Birthdays coming up" at the top of the list; search
+  also finds company, city and group. Everything, photo included, syncs both ways with phones (CardDAV) and comes
+  along with vCard import and export. Database update 014 runs by itself.
+- Right-click menu in the message list (desktop): open, reply, reply all, forward, archive, delete, spam,
+  (un)read, star, snooze, move, labels, make a task or rule, more from this sender. Works on the selection.
+
+### Changed
+- Phones: the bar above a message shows archive, delete and unread with larger buttons; all other actions are in
+  a ⋮ menu (like Gmail).
+
 ## [1.6.4] - 2026-10-19
 
 ### Fixed
@@ -242,6 +281,7 @@ First public release.
 - First version: login with mailbox credentials, multiple accounts, swipe actions with undo,
   sanitised reader, composer, settings, responsive layout, dark mode, PWA, FTP deploy.
 
+[1.7.0]: ../../releases/tag/v1.7.0
 [1.6.4]: ../../releases/tag/v1.6.4
 [1.6.3]: ../../releases/tag/v1.6.3
 [1.6.2]: ../../releases/tag/v1.6.2

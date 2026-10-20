@@ -18,6 +18,7 @@ const router = createRouter({
     { path: '/mail/:accountId?', name: 'mail', component: MailView },
     { path: '/calendar', name: 'calendar', component: () => import('./views/CalendarView.vue') },
     { path: '/tasks', name: 'tasks', component: () => import('./views/TasksView.vue') },
+    { path: '/attachments', name: 'attachments', component: () => import('./views/AttachmentsView.vue') },
     { path: '/contacts', name: 'contacts', component: () => import('./views/ContactsView.vue') },
     { path: '/settings/:tab?', name: 'settings', component: () => import('./views/SettingsView.vue') },
     { path: '/admin/:tab?', name: 'admin', component: () => import('./views/AdminView.vue'), meta: { admin: true } },

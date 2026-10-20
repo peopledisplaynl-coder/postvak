@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import SidebarLabels from './SidebarLabels.vue'
+import QuotaBar from './QuotaBar.vue'
 import AppIcon from './AppIcon.vue'
 import { useSession } from '../stores/session.js'
 import { useMail, ALL } from '../stores/mail.js'
@@ -124,6 +125,7 @@ function go(accountId, path = 'INBOX') {
       <SidebarLabels v-if="!dropAccountId" @picked="emit('navigate', null)" />
     </ul>
 
+    <QuotaBar />
     <router-link
       to="/calendar"
       class="mx-2 flex items-center gap-2 rounded-xl px-3 py-2 text-muted hover:bg-sunken hover:text-ink"
@@ -131,6 +133,14 @@ function go(accountId, path = 'INBOX') {
     >
       <AppIcon name="calendar" :size="19" />
       {{ t('calendar.title') }}
+    </router-link>
+    <router-link
+      to="/attachments"
+      class="mx-2 flex items-center gap-2 rounded-xl px-3 py-2 text-muted hover:bg-sunken hover:text-ink"
+      @click="emit('navigate', null)"
+    >
+      <AppIcon name="paperclip" :size="19" />
+      {{ t('attachmentsView.title') }}
     </router-link>
     <router-link
       to="/tasks"

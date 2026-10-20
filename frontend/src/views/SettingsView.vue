@@ -12,6 +12,7 @@ import SharedFilesSettings from '../components/SharedFilesSettings.vue'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
 import { api } from '../api/client.js'
+import { offlineEnabled, setOfflineEnabled } from '../api/offline.js'
 import { useMail, isSmallDevice } from '../stores/mail.js'
 import { folderLabel, folderIcon, folderOwnName } from '../folders.js'
 import { t, locale, languageNames } from '../i18n/index.js'
@@ -44,11 +45,21 @@ async function checkUpdates() {
   }
 }
 
+// Offline reading is a choice per device (not stored on the server).
+const offlineSupported = typeof caches !== 'undefined'
+const offline = ref(offlineEnabled())
+async function toggleOffline(on) {
+  await setOfflineEnabled(on)
+  offline.value = on
+  if (on) mail.loadMessages({ silent: true })
+  else toasts.show(t('offline.cleared'))
+}
+
 async function set(key, value) {
   try {
     await session.updateSettings({ [key]: value })
     // A new page size takes effect at once (the list starts over with the new size).
-    if (key.startsWith('page_size') && mail.accountId !== null) mail.loadMessages({ silent: true, restart: true })
+    if ((key.startsWith('page_size') || key === 'inbox_tabs') && mail.accountId !== null) mail.loadMessages({ silent: true, restart: true })
   } catch (e) {
     toasts.error(t('toast.failed', { msg: e.message }))
   }
@@ -379,6 +390,26 @@ const pageSizeDevices = computed(() => [
         <label v-if="session.accounts.length > 1" class="flex items-center justify-between gap-4 px-4 py-3">
           <span>{{ t('settings.unifiedInbox') }}</span>
           <input type="checkbox" class="size-5 accent-accent" :checked="session.settings.unified_inbox" @change="set('unified_inbox', $event.target.checked)" />
+        </label>
+        <label v-if="offlineSupported" class="flex items-center justify-between gap-4 px-4 py-3">
+          <span>
+            {{ t('offline.setting') }}
+            <span class="block text-sm text-muted">{{ t('offline.settingHint') }}</span>
+          </span>
+          <input type="checkbox" class="size-5 shrink-0 accent-accent" :checked="offline" @change="toggleOffline($event.target.checked)" />
+        </label>
+        <label class="flex items-center justify-between gap-4 px-4 py-3">
+          <span>
+            {{ t('settings.inboxTabs') }}
+            <span class="block text-sm text-muted">{{ t('settings.inboxTabsHint') }}</span>
+          </span>
+          <input type="checkbox" class="size-5 shrink-0 accent-accent" :checked="!!session.settings.inbox_tabs" @change="set('inbox_tabs', $event.target.checked)" />
+        </label>
+        <label class="flex items-center justify-between gap-4 px-4 py-3">
+          <span>{{ t('settings.afterDelete') }}</span>
+          <select :value="session.settings.after_delete ?? 'list'" class="shrink-0 rounded-lg bg-sunken px-3 py-1.5" @change="set('after_delete', $event.target.value)">
+            <option v-for="o in ['list', 'next', 'previous']" :key="o" :value="o">{{ t(`settings.afterDeleteOptions.${o}`) }}</option>
+          </select>
         </label>
         <label class="flex items-center justify-between gap-4 px-4 py-3">
           <span>

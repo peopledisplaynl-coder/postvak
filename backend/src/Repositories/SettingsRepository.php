@@ -35,6 +35,9 @@ final class SettingsRepository
         'text_size'        => 'normal',        // small | normal | large
         'page_size'        => 50,              // messages per page in the list (computer)
         'page_size_mobile' => 25,              // same on a phone or tablet
+        'inbox_tabs'       => false,           // inbox split into Primary / Promotions / Social / Updates
+        'after_delete'     => 'list',          // after deleting/archiving the open message: list | next | previous
+        'show_birthdays'   => true,            // birthdays of contacts in the calendar
         // Labels = IMAP keywords. The first five use Thunderbird's keywords, so they show there too.
         'labels'           => [
             ['key' => '$label1', 'name' => '', 'color' => '#D23F3F'],   // Important
@@ -67,6 +70,9 @@ final class SettingsRepository
         'text_size'         => ['enum', ['small', 'normal', 'large']],
         'page_size'         => ['int', 5, 100],
         'page_size_mobile'  => ['int', 5, 100],
+        'inbox_tabs'        => ['bool'],
+        'after_delete'      => ['enum', ['list', 'next', 'previous']],
+        'show_birthdays'    => ['bool'],
         'labels'            => ['labels'],
     ];
 

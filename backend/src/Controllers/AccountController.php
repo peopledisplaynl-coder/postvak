@@ -59,13 +59,22 @@ final class AccountController
         }
 
         if (isset($body['signature_html'])) {
-            $sig = (string) $body['signature_html'];
-            if (strlen($sig) > 20000) {
-                throw HttpException::badRequest('The signature is too long');
+            $body['signature_html'] = self::cleanSignature((string) $body['signature_html']);
+        }
+        if (isset($body['signatures'])) {
+            // Several signatures: {list: [{id, name, html}], new, reply}. signature_html = the one for new mail.
+            $in = is_array($body['signatures']) ? $body['signatures'] : [];
+            $list = [];
+            foreach (array_slice(is_array($in['list'] ?? null) ? $in['list'] : [], 0, 10) as $sig) {
+                $id = preg_replace('/[^a-z0-9-]/i', '', (string) ($sig['id'] ?? '')) ?: bin2hex(random_bytes(4));
+                $list[] = ['id' => mb_substr($id, 0, 20), 'name' => mb_substr(trim((string) ($sig['name'] ?? '')), 0, 50), 'html' => self::cleanSignature((string) ($sig['html'] ?? ''))];
             }
-            // Images belong in the signature as uploaded files, not as data: URIs; nothing active either.
-            $sig = preg_replace('#<(script|style|iframe|object|embed)\b[^>]*>.*?</\1>#is', '', $sig) ?? '';
-            $body['signature_html'] = preg_replace('/\son\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $sig) ?? '';
+            $ids = array_column($list, 'id');
+            $pick = static fn ($v) => in_array($v, $ids, true) ? $v : null;
+            $data = ['list' => $list, 'new' => $pick($in['new'] ?? null), 'reply' => $pick($in['reply'] ?? null)];
+            $body['signatures'] = json_encode($data, JSON_UNESCAPED_UNICODE);
+            $forNew = array_values(array_filter($list, static fn ($s) => $s['id'] === $data['new']))[0]['html'] ?? '';
+            $body['signature_html'] = $forNew;
         }
 
         // Changed server settings or password: verify before saving.
@@ -96,5 +105,15 @@ final class AccountController
         }
         $this->accounts->delete((int) $account['id']);
         Response::noContent();
+    }
+
+    /** Images belong in a signature as uploaded files, not as data: URIs; nothing active either. */
+    private static function cleanSignature(string $sig): string
+    {
+        if (strlen($sig) > 20000) {
+            throw HttpException::badRequest('The signature is too long');
+        }
+        $sig = preg_replace('#<(script|style|iframe|object|embed)\b[^>]*>.*?</\1>#is', '', $sig) ?? '';
+        return preg_replace('/\son\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $sig) ?? '';
     }
 }

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { timeZone } from '../calendar.js'
-import { api } from '../api/client.js'
+import { api, apiUrl } from '../api/client.js'
+import { prefetchMessages } from '../api/offline.js'
 import { t, locale } from '../i18n/index.js'
 import { useSession } from './session.js'
 import { useToasts } from './toasts.js'
@@ -19,6 +20,10 @@ export function pageSize(settings = useSession().settings) {
 
 /** The id "all" stands for the unified inbox (the inboxes of every account). */
 export const ALL = 'all'
+
+/** Path and query of a full message (shared with the offline copy). */
+const messageCall = (ref, images = false) => [`/accounts/${ref.account_id}/messages/${ref.uid}`, { folder: ref.folder, images: images ? 1 : undefined, tz: timeZone() }]
+const messageUrl = (ref) => apiUrl(...messageCall(ref))
 
 /** Unique key of a message in a list: the same uid can exist in two accounts. */
 export const msgKey = (m) => `${m.account_id}:${m.uid}`
@@ -92,6 +97,8 @@ export const useMail = defineStore('mail', {
     snoozeRequest: null,  // messages waiting for a snooze time (the picker is shown by MailView)
     labelFilter: null,    // only messages with this label (IMAP keyword) in the current folder
     filters: noFilters(), // search filters: unread, starred, with attachment, period, sender
+    category: 'primary',  // inbox tab (when the setting "inbox_tabs" is on)
+    advance: null,        // {next, previous}: keys next to the open message that was just removed
   }),
 
   getters: {
@@ -102,6 +109,10 @@ export const useMail = defineStore('mail', {
     },
     hasMore: (s) => s.messages.length < s.total,
     filtersActive: (s) => Object.entries(s.filters).some(([k, v]) => v && v !== noFilters()[k]),
+    /** Inbox tabs apply: the setting is on, an inbox is open and nothing is being searched. */
+    tabsActive() {
+      return !!useSession().settings.inbox_tabs && this.folderRole === 'inbox' && !this.search && !this.filtersActive && !this.labelFilter
+    },
     folderRole() {
       return this.unified ? 'inbox' : this.currentFolder?.role ?? null
     },
@@ -146,7 +157,14 @@ export const useMail = defineStore('mail', {
 
     /** Identifies what the list shows, so an answer for an older request can be ignored. */
     listKey() {
-      return `${this.accountId}:${this.folderPath}:${this.search}:${this.labelFilter}:${JSON.stringify(this.filters)}`
+      return `${this.accountId}:${this.folderPath}:${this.search}:${this.labelFilter}:${JSON.stringify(this.filters)}:${this.tabsActive ? this.category : ''}`
+    },
+
+    setCategory(category) {
+      if (this.category === category) return
+      this.category = category
+      this.messages = []
+      return this.loadMessages()
     },
 
     setFilter(key, value) {
@@ -174,6 +192,7 @@ export const useMail = defineStore('mail', {
         body: this.search && this.searchBody ? 1 : undefined,
         label: this.labelFilter || undefined,
         ...filterQuery(this.filters),
+        category: this.tabsActive ? this.category : undefined,
       }
       return this.unified
         ? api.get('/unified/messages', query)
@@ -200,6 +219,8 @@ export const useMail = defineStore('mail', {
           this.page = 1
         }
         this.total = data?.total ?? this.messages.length
+        // Offline reading: keep the newest messages of this list on the device.
+        prefetchMessages(fresh, (m) => this.fetchMessage(m), (m) => messageUrl(m))
         for (const err of data?.errors ?? []) {
           if (!silent) useToasts().error(t('toast.accountFailed', { email: err.email }))
         }
@@ -284,7 +305,7 @@ export const useMail = defineStore('mail', {
      * window ends (one request per mailbox). Undo puts them back where they were.
      * `target` is a move target (folder path, 'archive', …) or { commit(group, keepalive) }.
      */
-    removeManyWithUndo(messages, target, label) {
+    removeManyWithUndo(messages, target, label, onUndo = null) {
       const toasts = useToasts()
       const listId = `${this.accountId}:${this.folderPath}`
 
@@ -294,9 +315,19 @@ export const useMail = defineStore('mail', {
         .sort((a, b) => a.index - b.index)
       if (!removed.length) return
 
+      const keys = removed.map((r) => msgKey(r.message))
+      if (keys.includes(this.openKey)) {
+        // Neighbours of the open message that stay, for "after deleting, open the next/previous message".
+        const i = this.messages.findIndex((m) => msgKey(m) === this.openKey)
+        const stays = (m) => m && !keys.includes(msgKey(m))
+        const keyOf = (m) => (m ? msgKey(m) : null)
+        this.advance = {
+          next: keyOf(this.messages.slice(i + 1).find(stays)),
+          previous: keyOf([...this.messages.slice(0, i)].reverse().find(stays)),
+        }
+      }
       for (const r of [...removed].reverse()) this.messages.splice(r.index, 1)
       this.total = Math.max(0, this.total - removed.length)
-      const keys = removed.map((r) => msgKey(r.message))
       if (keys.includes(this.openKey)) this.openKey = null
       this.selected = this.selected.filter((k) => !keys.includes(k))
 
@@ -340,6 +371,7 @@ export const useMail = defineStore('mail', {
             if (batch.done) return
             finish()
             this.restore(removed, listId)
+            onUndo?.()
           },
         } : null,
       })
@@ -645,7 +677,7 @@ export const useMail = defineStore('mail', {
     /** Full message. `ref` is a message summary or {account_id, folder, uid}. */
     async fetchMessage(ref, { images = false } = {}) {
       // tz: an all-day invitation is shown on the right day.
-      return api.get(`/accounts/${ref.account_id}/messages/${ref.uid}`, { folder: ref.folder, images: images ? 1 : undefined, tz: timeZone() })
+      return api.get(...messageCall(ref, images))
     },
   },
 })

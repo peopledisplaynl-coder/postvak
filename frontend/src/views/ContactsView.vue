@@ -1,11 +1,13 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
+import ContactEditor from '../components/ContactEditor.vue'
 import { api } from '../api/client.js'
+import { contactInitials, workLine, addressLines, mapsUrl, birthdayText, daysToBirthday, searchText } from '../contacts.js'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
-import { avatarColor, initials, fullDate } from '../format.js'
+import { avatarColor, fullDate } from '../format.js'
 import { t } from '../i18n/index.js'
 
 /**
@@ -13,6 +15,7 @@ import { t } from '../i18n/index.js'
  * while sending. Add/edit/delete, and vCard import/export.
  */
 const router = useRouter()
+const route = useRoute()
 const session = useSession()
 const toasts = useToasts()
 
@@ -22,11 +25,10 @@ const loading = ref(false)
 const query = ref('')
 const currentId = ref(null) // id, 'new' or null
 const editing = ref(false)
-const form = ref({ name: '', email: '', phone: '', notes: '', favorite: false })
 const saving = ref(false)
 const menuOpen = ref(false)
 const fileInput = ref(null)
-const nameInput = ref(null)
+const group = ref(null) // show only this group
 
 async function load() {
   loading.value = true
@@ -38,7 +40,12 @@ async function load() {
     loading.value = false
   }
 }
-onMounted(load)
+onMounted(async () => {
+  await load()
+  // /contacts?id=12 (from a birthday in the calendar) opens that contact.
+  const id = Number(route.query.id)
+  if (id && contacts.value.some((c) => c.id === id)) currentId.value = id
+})
 watch(filter, (f, old) => {
   // Favourites is a view on the saved contacts: no reload needed between those two.
   if (f === 'all' || old === 'all') load()
@@ -47,13 +54,31 @@ watch(filter, (f, old) => {
 const normalize = (s) => (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 const label = (c) => c.name || c.email
 
+/** All groups in use (Google calls them labels), for the filter chips and the editor. */
+const allGroups = computed(() => {
+  const seen = new Map()
+  for (const c of contacts.value) for (const g of c.details?.groups ?? []) if (!seen.has(g.toLowerCase())) seen.set(g.toLowerCase(), g)
+  return [...seen.values()].sort((a, b) => a.localeCompare(b))
+})
+watch(allGroups, (list) => { if (group.value && !list.includes(group.value)) group.value = null })
+
 const visible = computed(() => {
   const q = normalize(query.value.trim())
   return contacts.value.filter((c) => {
     if (filter.value === 'favorites' && !c.favorite) return false
+    if (group.value && !(c.details?.groups ?? []).includes(group.value)) return false
     if (!q) return true
-    return normalize(`${c.name} ${c.email} ${c.phone}`).includes(q)
+    return normalize(searchText(c)).includes(q)
   })
+})
+
+/** Birthdays in the coming week (shown at the top of the saved contacts). */
+const soonBirthdays = computed(() => {
+  if (query.value || group.value || filter.value === 'all') return []
+  return visible.value
+    .map((c) => ({ c, days: daysToBirthday(c.details?.birthday) }))
+    .filter((x) => x.days !== null && x.days <= 7)
+    .sort((a, b) => a.days - b.days)
 })
 
 /** Alphabetical groups: A, B, …, # for the rest. */
@@ -78,17 +103,11 @@ function select(c) {
 
 function startNew() {
   currentId.value = 'new'
-  form.value = { name: '', email: '', phone: '', notes: '', favorite: false }
   editing.value = true
-  nextTick(() => nameInput.value?.focus())
 }
 
 function startEdit() {
-  const c = current.value
-  if (!c) return
-  form.value = { name: c.name, email: c.email, phone: c.phone, notes: c.notes, favorite: c.favorite }
-  editing.value = true
-  nextTick(() => nameInput.value?.focus())
+  if (current.value) editing.value = true
 }
 
 function cancelEdit() {
@@ -112,15 +131,21 @@ function errorText(e) {
   return e.status === 409 ? t('contacts.duplicate') : t('toast.failed', { msg: e.message })
 }
 
-async function save() {
+/** Save from the editor: the details, then the photo (new, removed or unchanged). */
+async function save({ details, notes, favorite, photo }) {
   saving.value = true
   try {
-    // A contact from a phone may have no e-mail address; leave it out then.
-    const body = { ...form.value }
-    if (currentId.value !== 'new' && !body.email.trim()) delete body.email
-    const contact = currentId.value === 'new'
+    const body = { details, notes, favorite }
+    let contact = currentId.value === 'new'
       ? await api.post('/contacts', body)
       : await api.patch(`/contacts/${currentId.value}`, body)
+    if (photo instanceof Blob) {
+      const form = new FormData()
+      form.append('file', photo, 'photo.jpg')
+      contact = await api.upload(`/contacts/${contact.id}/photo`, form)
+    } else if (photo === null) {
+      contact = await api.del(`/contacts/${contact.id}/photo`)
+    }
     upsertLocal(contact)
     currentId.value = contact.id
     editing.value = false
@@ -162,11 +187,14 @@ async function remove(c) {
   }
 }
 
-function mailTo(c) {
+function mailTo(c, email = c.email) {
   const unified = session.accounts.length > 1 && session.settings.unified_inbox !== false
   const accountId = unified ? 'all' : session.loginAccount?.id ?? ''
-  router.push({ path: `/mail/${accountId}`, query: { compose: c.email, name: c.name || undefined } })
+  router.push({ path: `/mail/${accountId}`, query: { compose: email, name: c.name || undefined } })
 }
+
+const telHref = (n) => `tel:${String(n).replace(/[^0-9+]/g, '')}`
+const typeLabel = (type) => t(`contacts.types.${type}`)
 
 // ---- import / export
 async function importFile(e) {
@@ -245,6 +273,15 @@ const countLabel = computed(() => (visible.value.length === 1 ? t('contacts.coun
             @click="filter = f"
           >{{ t(`contacts.filter${f[0].toUpperCase()}${f.slice(1)}`) }}</button>
         </div>
+        <div v-if="allGroups.length" class="flex flex-wrap gap-1.5" role="group" :aria-label="t('contacts.groups')">
+          <button
+            v-for="g in allGroups" :key="g"
+            class="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs ring-1 transition"
+            :class="group === g ? 'bg-accent-soft font-medium text-accent ring-accent/40' : 'text-muted ring-line hover:bg-sunken'"
+            :aria-pressed="group === g"
+            @click="group = group === g ? null : g"
+          ><AppIcon name="tag" :size="12" />{{ g }}</button>
+        </div>
         <p v-if="filter === 'all'" class="text-xs text-muted">{{ t('contacts.allHint') }}</p>
       </div>
 
@@ -260,6 +297,18 @@ const countLabel = computed(() => (visible.value.length === 1 ? t('contacts.coun
           <p v-if="!query && filter !== 'all'" class="mx-auto mt-3 max-w-xs text-sm">{{ t('contacts.importHelp') }}</p>
         </div>
         <template v-else>
+          <section v-if="soonBirthdays.length" class="border-b border-line">
+            <h2 class="px-4 pt-3 pb-1 text-xs font-semibold text-muted">{{ t('contacts.birthdaysSoon') }}</h2>
+            <button
+              v-for="{ c, days } in soonBirthdays" :key="'b' + c.id"
+              class="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-sunken/60"
+              @click="select(c)"
+            >
+              <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-flag/15 text-flag"><AppIcon name="calendar" :size="16" /></span>
+              <span class="min-w-0 flex-1 truncate">{{ label(c) }}</span>
+              <span class="shrink-0 text-sm text-muted">{{ days === 0 ? t('contacts.birthdayToday') : days === 1 ? t('contacts.birthdayTomorrow') : t('contacts.birthdayIn', { n: days }) }}</span>
+            </button>
+          </section>
           <section v-for="[letter, list] in groups" :key="letter">
             <h2 class="sticky top-0 z-10 bg-surface/95 px-4 pt-3 pb-1 text-xs font-semibold text-muted backdrop-blur">{{ letter }}</h2>
             <ul>
@@ -269,12 +318,13 @@ const countLabel = computed(() => (visible.value.length === 1 ? t('contacts.coun
                   :class="c.id === currentId ? 'bg-accent-soft' : 'hover:bg-sunken/60'"
                   @click="select(c)"
                 >
-                  <span class="flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white" :style="{ background: avatarColor(c.email || c.name) }">
-                    {{ initials(c) }}
+                  <span class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-semibold text-white" :style="{ background: avatarColor(c.email || c.name) }">
+                    <img v-if="c.photo_url" :src="c.photo_url" alt="" loading="lazy" class="size-full object-cover" />
+                    <template v-else>{{ contactInitials(c) }}</template>
                   </span>
                   <span class="min-w-0 flex-1">
-                    <span class="block truncate">{{ label(c) }}</span>
-                    <span v-if="c.name" class="block truncate text-sm text-muted">{{ c.email }}</span>
+                    <span class="block truncate">{{ label(c) || c.phone }}</span>
+                    <span v-if="workLine(c.details) || (c.name && c.email)" class="block truncate text-sm text-muted">{{ workLine(c.details) || c.email }}</span>
                   </span>
                   <span v-if="!c.saved" class="shrink-0 rounded-full bg-sunken px-2 py-0.5 text-xs text-muted">{{ t('contacts.auto') }}</span>
                   <AppIcon v-if="c.favorite" name="flag" :size="16" class="shrink-0 fill-current text-flag" />
@@ -313,77 +363,99 @@ const countLabel = computed(() => (visible.value.length === 1 ? t('contacts.coun
       </header>
 
       <!-- Edit form -->
-      <form v-if="editing" class="mx-auto w-full max-w-lg space-y-4 px-5 py-4" @submit.prevent="save">
-        <h2 class="text-xl font-semibold">{{ currentId === 'new' ? t('contacts.new') : t('contacts.edit') }}</h2>
-        <label class="block">
-          <span class="mb-1 block text-sm text-muted">{{ t('contacts.name') }}</span>
-          <input ref="nameInput" v-model="form.name" maxlength="255" class="w-full rounded-lg border border-line bg-surface px-3 py-2 outline-none focus:border-accent" />
-        </label>
-        <label class="block">
-          <span class="mb-1 block text-sm text-muted">{{ t('contacts.email') }}</span>
-          <input v-model="form.email" type="email" :required="currentId === 'new' || !!current?.email" maxlength="255" class="w-full rounded-lg border border-line bg-surface px-3 py-2 outline-none focus:border-accent" />
-        </label>
-        <label class="block">
-          <span class="mb-1 block text-sm text-muted">{{ t('contacts.phone') }}</span>
-          <input v-model="form.phone" type="tel" maxlength="64" class="w-full rounded-lg border border-line bg-surface px-3 py-2 outline-none focus:border-accent" />
-        </label>
-        <label class="block">
-          <span class="mb-1 block text-sm text-muted">{{ t('contacts.notes') }}</span>
-          <textarea v-model="form.notes" rows="4" maxlength="5000" class="w-full rounded-lg border border-line bg-surface px-3 py-2 outline-none focus:border-accent" />
-        </label>
-        <label class="flex items-center gap-2">
-          <input v-model="form.favorite" type="checkbox" class="size-4 accent-[var(--color-accent)]" />
-          {{ t('contacts.favorite') }}
-        </label>
-        <div class="flex justify-end gap-2 pt-2">
-          <button type="button" class="rounded-lg px-4 py-2 text-muted hover:bg-sunken" @click="cancelEdit">{{ t('contacts.cancel') }}</button>
-          <button class="rounded-lg bg-accent px-4 py-2 font-medium text-white disabled:opacity-60" :disabled="saving || (currentId === 'new' && !form.email.trim())">{{ t('contacts.save') }}</button>
-        </div>
-      </form>
+      <ContactEditor
+        v-if="editing"
+        :key="currentId"
+        :contact="current"
+        :groups="allGroups"
+        :saving="saving"
+        @save="save"
+        @cancel="cancelEdit"
+      />
 
       <!-- View -->
-      <div v-else-if="current" class="mx-auto w-full max-w-lg px-5 py-4">
+      <div v-else-if="current" class="mx-auto w-full max-w-xl px-5 py-4">
         <div class="flex flex-col items-center gap-3 text-center">
-          <span class="flex size-20 items-center justify-center rounded-full text-2xl font-semibold text-white" :style="{ background: avatarColor(current.email || current.name) }">
-            {{ initials(current) }}
+          <span class="flex size-28 items-center justify-center overflow-hidden rounded-full text-4xl font-semibold text-white" :style="{ background: avatarColor(current.email || current.name) }">
+            <img v-if="current.photo_url" :src="current.photo_url" alt="" class="size-full object-cover" />
+            <template v-else>{{ contactInitials(current) }}</template>
           </span>
           <div class="min-w-0">
-            <h2 class="text-xl font-semibold break-words">{{ label(current) }}</h2>
-            <p v-if="current.name" class="text-muted break-all">{{ current.email }}</p>
+            <h2 class="text-2xl font-semibold break-words">{{ label(current) || current.phone }}</h2>
+            <p v-if="current.details?.nickname" class="text-muted">“{{ current.details.nickname }}”</p>
+            <p v-if="workLine(current.details)" class="text-muted">{{ workLine(current.details) }}</p>
+          </div>
+          <div v-if="current.details?.groups?.length" class="flex flex-wrap justify-center gap-1.5">
+            <button v-for="g in current.details.groups" :key="g" class="flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-0.5 text-xs text-accent" @click="group = g; closeDetail()">
+              <AppIcon name="tag" :size="12" />{{ g }}
+            </button>
           </div>
           <div class="flex flex-wrap justify-center gap-2">
             <button v-if="current.email" class="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-white" @click="mailTo(current)">
               <AppIcon name="send" :size="17" /> {{ t('contacts.mail') }}
             </button>
-            <a v-if="current.phone" :href="`tel:${current.phone.replace(/[^0-9+]/g, '')}`" class="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ring-1 ring-line hover:bg-sunken">
-              <AppIcon name="phone" :size="17" /> {{ current.phone }}
+            <a v-if="current.phone" :href="telHref(current.phone)" class="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ring-1 ring-line hover:bg-sunken">
+              <AppIcon name="phone" :size="17" /> {{ t('contacts.call') }}
             </a>
-            <button v-if="!current.saved" class="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ring-1 ring-line hover:bg-sunken" @click="keep(current)">
+            <button v-if="current.saved" class="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ring-1 ring-line hover:bg-sunken" @click="startEdit">
+              <AppIcon name="drafts" :size="17" /> {{ t('contacts.edit') }}
+            </button>
+            <button v-else class="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ring-1 ring-line hover:bg-sunken" @click="keep(current)">
               <AppIcon name="userPlus" :size="17" /> {{ t('contacts.saveAuto') }}
             </button>
           </div>
         </div>
 
-        <dl class="mt-6 divide-y divide-line rounded-2xl ring-1 ring-line">
-          <div v-if="current.email" class="px-4 py-3">
-            <dt class="text-sm text-muted">{{ t('contacts.email') }}</dt>
-            <dd class="break-all">{{ current.email }}</dd>
-          </div>
-          <div v-if="current.other_emails?.length" class="px-4 py-3">
-            <dt class="text-sm text-muted">{{ t('contacts.otherEmails') }}</dt>
-            <dd v-for="e in current.other_emails" :key="e" class="break-all">{{ e }}</dd>
-          </div>
-          <div v-if="current.phone" class="px-4 py-3">
-            <dt class="text-sm text-muted">{{ t('contacts.phone') }}</dt>
-            <dd>{{ current.phone }}</dd>
-          </div>
-          <div v-if="current.notes" class="px-4 py-3">
-            <dt class="text-sm text-muted">{{ t('contacts.notes') }}</dt>
-            <dd class="whitespace-pre-line break-words">{{ current.notes }}</dd>
-          </div>
-        </dl>
+        <!-- Contact details, like Google Contacts -->
+        <section class="mt-6 rounded-2xl ring-1 ring-line">
+          <h3 class="px-4 pt-3 pb-1 font-medium">{{ t('contacts.contactInfo') }}</h3>
+          <ul class="pb-2">
+            <li v-for="(e, i) in current.details?.emails ?? []" :key="'e' + i" class="flex items-center gap-3 px-4 py-2">
+              <AppIcon name="mail" :size="18" class="shrink-0 text-muted" />
+              <span class="min-w-0 flex-1">
+                <button class="block max-w-full truncate text-left text-accent hover:underline" @click="mailTo(current, e.value)">{{ e.value }}</button>
+                <span class="text-xs text-muted">{{ typeLabel(e.type) }}</span>
+              </span>
+            </li>
+            <li v-for="(p, i) in current.details?.phones ?? []" :key="'p' + i" class="flex items-center gap-3 px-4 py-2">
+              <AppIcon name="phone" :size="18" class="shrink-0 text-muted" />
+              <span class="min-w-0 flex-1">
+                <a :href="telHref(p.value)" class="block text-accent hover:underline">{{ p.value }}</a>
+                <span class="text-xs text-muted">{{ typeLabel(p.type) }}</span>
+              </span>
+            </li>
+            <li v-for="(a, i) in current.details?.addresses ?? []" :key="'a' + i" class="flex items-start gap-3 px-4 py-2">
+              <AppIcon name="pin" :size="18" class="mt-0.5 shrink-0 text-muted" />
+              <span class="min-w-0 flex-1">
+                <span v-for="line in addressLines(a)" :key="line" class="block whitespace-pre-line">{{ line }}</span>
+                <span class="text-xs text-muted">{{ typeLabel(a.type) }} · <a :href="mapsUrl(a)" target="_blank" rel="noopener" class="text-accent hover:underline">{{ t('contacts.onMap') }}</a></span>
+              </span>
+            </li>
+            <li v-if="current.details?.birthday" class="flex items-center gap-3 px-4 py-2">
+              <AppIcon name="calendar" :size="18" class="shrink-0 text-muted" />
+              <span class="min-w-0 flex-1">
+                <span class="block">{{ birthdayText(current.details.birthday) }}</span>
+                <span class="text-xs text-muted">{{ t('contacts.birthday') }}</span>
+              </span>
+            </li>
+            <li v-for="(w, i) in current.details?.websites ?? []" :key="'w' + i" class="flex items-center gap-3 px-4 py-2">
+              <AppIcon name="globe" :size="18" class="shrink-0 text-muted" />
+              <a :href="w.value" target="_blank" rel="noopener" class="min-w-0 flex-1 truncate text-accent hover:underline">{{ w.value.replace(/^https?:\/\//, '') }}</a>
+            </li>
+            <li v-if="!(current.details?.emails?.length || current.details?.phones?.length || current.details?.addresses?.length || current.details?.birthday || current.details?.websites?.length)" class="px-4 py-2 text-sm text-muted">
+              {{ t('contacts.noInfo') }}
+            </li>
+          </ul>
+        </section>
+
+        <section v-if="current.notes" class="mt-4 rounded-2xl px-4 py-3 ring-1 ring-line">
+          <h3 class="mb-1 font-medium">{{ t('contacts.notes') }}</h3>
+          <p class="whitespace-pre-line break-words">{{ current.notes }}</p>
+        </section>
+
         <p class="mt-3 text-center text-xs text-muted">
           {{ current.times_used ? t('contacts.used', { n: current.times_used, date: fullDate(current.last_used_at) }) : t('contacts.usedNever') }}
+          <template v-if="current.synced"> · {{ t('contacts.syncedPhone') }}</template>
         </p>
       </div>
 

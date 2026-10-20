@@ -120,8 +120,8 @@ final class AddressBookBackend extends AbstractBackend implements SyncSupport
         }
         if ($existing) {
             Database::run(
-                'UPDATE contacts SET name = ?, phone = ?, notes = ?, extra_emails = ?, saved = 1, card_uri = ?, vcard = ? WHERE id = ?',
-                [$f['name'] ?: null, $f['phone'], $f['notes'], $f['extra_emails'], $uri, (string) $cardData, $existing['id']]
+                'UPDATE contacts SET name = ?, phone = ?, notes = ?, extra_emails = ?, details = ?, photo = NULL, photo_mime = NULL, saved = 1, card_uri = ?, vcard = ? WHERE id = ?',
+                [$f['name'] ?: null, $f['phone'], $f['notes'], $f['extra_emails'], $f['details'], $uri, (string) $cardData, $existing['id']]
             );
             if ((int) $existing['saved'] && !$existing['card_uri']) {
                 // It was known to phones under its pv-<id> name.
@@ -133,8 +133,8 @@ final class AddressBookBackend extends AbstractBackend implements SyncSupport
                 throw new InsufficientStorage('Too many contacts');
             }
             Database::run(
-                'INSERT INTO contacts (user_id, email, name, phone, notes, extra_emails, saved, card_uri, vcard) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)',
-                [$userId, $email, $f['name'] ?: null, $f['phone'], $f['notes'], $f['extra_emails'], $uri, (string) $cardData]
+                'INSERT INTO contacts (user_id, email, name, phone, notes, extra_emails, details, saved, card_uri, vcard) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)',
+                [$userId, $email, $f['name'] ?: null, $f['phone'], $f['notes'], $f['extra_emails'], $f['details'], $uri, (string) $cardData]
             );
         }
         ContactCards::log($userId, $uri, ContactCards::ADDED);
@@ -161,8 +161,9 @@ final class AddressBookBackend extends AbstractBackend implements SyncSupport
             }
         }
         Database::run(
-            'UPDATE contacts SET email = ?, name = ?, phone = ?, notes = ?, extra_emails = ?, vcard = ? WHERE id = ?',
-            [$email, $f['name'] ?: null, $f['phone'], $f['notes'], $f['extra_emails'], (string) $cardData, $row['id']]
+            // The phone's card is the newest version now, photo included (a photo set in Postvak was in it).
+            'UPDATE contacts SET email = ?, name = ?, phone = ?, notes = ?, extra_emails = ?, details = ?, photo = NULL, photo_mime = NULL, vcard = ? WHERE id = ?',
+            [$email, $f['name'] ?: null, $f['phone'], $f['notes'], $f['extra_emails'], $f['details'], (string) $cardData, $row['id']]
         );
         ContactCards::log($userId, (string) $cardUri, ContactCards::MODIFIED);
         return '"' . md5((string) $cardData) . '"';

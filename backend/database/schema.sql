@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     junk_folder     VARCHAR(255) NULL,
 
     signature_html  TEXT NULL,
+    signatures      MEDIUMTEXT NULL,                   -- several signatures as JSON (015)
 
     -- Push notifications: on/off, and the last INBOX uid the cron job has seen.
     notify             TINYINT(1)      NOT NULL DEFAULT 1,
@@ -80,6 +81,9 @@ CREATE TABLE IF NOT EXISTS contacts (
     name            VARCHAR(255) NULL,
     phone           VARCHAR(64) NULL,
     notes           TEXT NULL,
+    details         MEDIUMTEXT NULL,                   -- JSON: names, company, e-mails, phones, addresses, birthday, … (014)
+    photo           MEDIUMBLOB NULL,                   -- photo added in Postvak (a phone's photo stays in vcard)
+    photo_mime      VARCHAR(40) NULL,
     favorite        TINYINT(1) NOT NULL DEFAULT 0,
     saved           TINYINT(1) NOT NULL DEFAULT 0,     -- 1 = added/edited by the user, 0 = collected when sending
     card_uri        VARCHAR(200) NULL,                 -- CardDAV name when a phone created the card
@@ -461,4 +465,28 @@ CREATE TABLE IF NOT EXISTS shared_files (
     CONSTRAINT fk_shared_files_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT IGNORE INTO schema_migrations (version) VALUES ('001_initial'), ('002_trusted_senders_admin'), ('003_message_snippets'), ('004_contacts'), ('005_push_notifications'), ('006_scheduled_snooze'), ('007_two_factor'), ('008_push_language'), ('009_calendar'), ('010_feeds_carddav'), ('011_rules_autoreply_templates'), ('012_signature_images'), ('013_shared_files');
+-- Muted conversations and follow-up reminders (015)
+CREATE TABLE IF NOT EXISTS muted_threads (
+    id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    account_id      INT UNSIGNED NOT NULL,
+    message_id      VARCHAR(255) NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_muted_thread (account_id, message_id),
+    CONSTRAINT fk_muted_threads_account FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS followups (
+    id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    account_id      INT UNSIGNED NOT NULL,
+    message_id      VARCHAR(255) NOT NULL,
+    subject         VARCHAR(500) NOT NULL DEFAULT '',
+    remind_at       DATETIME NOT NULL,
+    status          VARCHAR(10) NOT NULL DEFAULT 'waiting',   -- waiting | answered | reminded
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_followups_due (status, remind_at),
+    CONSTRAINT fk_followups_account FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_migrations (version) VALUES ('001_initial'), ('002_trusted_senders_admin'), ('003_message_snippets'), ('004_contacts'), ('005_push_notifications'), ('006_scheduled_snooze'), ('007_two_factor'), ('008_push_language'), ('009_calendar'), ('010_feeds_carddav'), ('011_rules_autoreply_templates'), ('012_signature_images'), ('013_shared_files'), ('014_contact_details'), ('015_mute_followup_signatures');

@@ -114,6 +114,8 @@ const defaultFields = [
   { key: 'sort', label: () => t('list.sort'), options: ['date_desc', 'date_asc', 'from', 'subject', 'size_desc'].map((v) => [v, t(`list.sortOptions.${v}`)]) },
   { key: 'page_size_mobile', label: () => `${t('settings.pageSize')}: ${t('settings.pageSizeMobile')}`, options: [5, 10, 15, 25, 50, 100].map((n) => [n, t('settings.messagesN', { n })]) },
   { key: 'page_size', label: () => `${t('settings.pageSize')}: ${t('settings.pageSizeDesktop')}`, options: [5, 10, 15, 25, 50, 100].map((n) => [n, t('settings.messagesN', { n })]) },
+  { key: 'inbox_tabs', label: () => t('settings.inboxTabs'), options: [[false, t('settings.off')], [true, t('settings.on')]] },
+  { key: 'after_delete', label: () => t('settings.afterDelete'), options: ['list', 'next', 'previous'].map((o) => [o, t(`settings.afterDeleteOptions.${o}`)]) },
   { key: 'undo_seconds', label: () => t('settings.undoSeconds'), options: [0, 3, 5, 10, 20].map((v) => [v, v ? t('settings.seconds', { n: v }) : t('actions.none')]) },
 ]
 

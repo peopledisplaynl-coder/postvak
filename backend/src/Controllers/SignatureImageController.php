@@ -64,7 +64,8 @@ final class SignatureImageController
         if ($row === null) {
             return;
         }
-        $used = Database::one('SELECT id FROM accounts WHERE user_id = ? AND signature_html LIKE ?', [$userId, '%' . $row['token'] . '%']);
+        $like = '%' . $row['token'] . '%';
+        $used = Database::one('SELECT id FROM accounts WHERE user_id = ? AND (signature_html LIKE ? OR signatures LIKE ?)', [$userId, $like, $like]);
         if ($used === null) {
             Database::run('DELETE FROM signature_images WHERE id = ?', [$id]);
         }

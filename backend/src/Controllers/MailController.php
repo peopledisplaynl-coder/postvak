@@ -13,6 +13,7 @@ use Postvak\Http\Request;
 use Postvak\Http\Response;
 use Postvak\Mail\ImapService;
 use Postvak\Mail\MessageSanitizer;
+use Postvak\Mail\MessageInsights;
 use Postvak\Mail\SmtpService;
 use Postvak\Mail\Scheduler;
 use Postvak\Mail\Snoozer;
@@ -67,7 +68,7 @@ final class MailController
                 $imap = new ImapService($account);
                 $imap->setSearchInBody($r->query('body') === '1');
                 $imap->setKeywordFilter($r->query('label') ?: null);
-                $imap->setFilters($r->query('filter'), $r->query('since'), $r->query('from'));
+                $imap->setFilters($r->query('filter'), $r->query('since'), $r->query('from'), $r->query('category'));
                 $cache = new SnippetCache((int) $account['id']);
                 $list = $threads
                     ? $imap->listThreads('INBOX', 1, $need, $q === '' ? null : $q, $cache)
@@ -146,7 +147,7 @@ final class MailController
         $folder = $this->folderParam($r);
         $imap->setSearchInBody($r->query('body') === '1');
         $imap->setKeywordFilter($r->query('label') ?: null);
-        $imap->setFilters($r->query('filter'), $r->query('since'), $r->query('from'));
+        $imap->setFilters($r->query('filter'), $r->query('since'), $r->query('from'), $r->query('category'));
         // threads=1: one row per conversation (only in date order, like Gmail).
         $list = $r->query('threads') === '1' && $sort === 'date_desc'
             ? $imap->listThreads($folder, $page, $perPage, $q === '' ? null : $q, $cache)
@@ -267,6 +268,12 @@ final class MailController
         $trusted = (new TrustedSenderRepository())->isTrusted((int) $account['user_id'], $fromEmail);
         $data = $this->present($account, $folder, $uid, $message, $trusted || (bool) $r->query('images', false));
         $data['trusted_sender'] = $trusted;
+        // From the headers: unsubscribe link, whether the sender is genuine, mailbox tab, muted conversation.
+        $rawHeader = (string) ($message->getHeader()?->raw ?? '');
+        $fromName = $message->getFrom()->first()->personal ?? null;
+        $data['unsubscribe'] = MessageInsights::unsubscribe($rawHeader) !== null;
+        $data['authenticity'] = MessageInsights::authenticity($rawHeader, $fromEmail, is_string($fromName) ? $fromName : null);
+        $data['muted'] = (new \Postvak\Mail\MutedThreads())->isMuted((int) $account['id'], $rawHeader);
         try {
             $data['labels'] = $imap->labelsOf($folder, $uid);
         } catch (Throwable) {
@@ -305,6 +312,83 @@ final class MailController
             (int) $account['user_id'], $account, $found, $response, (bool) $r->input('reply', true),
             is_numeric($calendarId) ? (int) $calendarId : null,
         ));
+    }
+
+    /**
+     * POST /accounts/{id}/messages/{uid}/unsubscribe  {folder}
+     * One-click (RFC 8058) is done here; a mailto address gets a mail from this account; otherwise the page to
+     * open is returned. → {done: bool, method: one_click|mailto|link, url?}
+     */
+    public function unsubscribe(Request $r): void
+    {
+        [$account, $imap] = $this->open($r);
+        $message = $imap->getMessage($this->folderParam($r), $r->intParam('uid'));
+        $info = MessageInsights::unsubscribe((string) ($message->getHeader()?->raw ?? ''))
+            ?? throw HttpException::badRequest('This message has no unsubscribe information');
+        if ($info['one_click']) {
+            try {
+                $res = \Postvak\Http\Fetcher::post($info['url'], 'List-Unsubscribe=One-Click');
+                if ($res['status'] >= 200 && $res['status'] < 300) {
+                    Response::json(['done' => true, 'method' => 'one_click']);
+                }
+                error_log('[postvak] one-click unsubscribe answered ' . $res['status']);
+            } catch (Throwable $e) {
+                error_log('[postvak] one-click unsubscribe failed: ' . $e->getMessage());
+            }
+        }
+        if ($info['mailto'] !== null && ($to = MessageInsights::parseMailto($info['mailto'])) !== null) {
+            [$address, $subject, $body] = $to;
+            SmtpService::send($account, [
+                'to' => [['email' => $address, 'name' => '']], 'cc' => [], 'bcc' => [],
+                'subject' => $subject, 'html' => '<p>' . htmlspecialchars($body) . '</p>',
+            ]);
+            Response::json(['done' => true, 'method' => 'mailto']);
+        }
+        if ($info['url'] !== null) {
+            Response::json(['done' => false, 'method' => 'link', 'url' => $info['url']]);
+        }
+        throw new HttpException(502, 'Unsubscribing did not work; try the link in the message itself');
+    }
+
+    /** GET /accounts/{id}/quota → {used, limit} in bytes, or null when the mail server does not tell */
+    public function quota(Request $r): void
+    {
+        [, $imap] = $this->open($r);
+        session_write_close();
+        Response::json($imap->quota());
+    }
+
+    /** GET /accounts/{id}/attachments?folder=INBOX&page=1&q= — messages with attachments and their files. */
+    public function attachments(Request $r): void
+    {
+        [, $imap] = $this->open($r);
+        session_write_close();
+        $page = max(1, (int) $r->query('page', 1));
+        $q = trim((string) $r->query('q', ''));
+        Response::json($imap->attachmentOverview($this->folderParam($r), $page, 25, $q !== '' ? mb_substr($q, 0, 200) : null));
+    }
+
+    /** POST /accounts/{id}/messages/{uid}/mute  {folder, muted: bool} — ignore the conversation (or stop ignoring). */
+    public function mute(Request $r): void
+    {
+        [$account, $imap] = $this->open($r);
+        $raw = (string) ($imap->getMessage($this->folderParam($r), $r->intParam('uid'))->getHeader()?->raw ?? '');
+        $threads = new \Postvak\Mail\MutedThreads();
+        $on = (bool) $r->input('muted', true);
+        $on ? $threads->mute((int) $account['id'], $raw) : $threads->unmute((int) $account['id'], $raw);
+        Response::json(['muted' => $on]);
+    }
+
+    /** GET /accounts/{id}/messages/{uid}/source?folder=&download=1 — the original message (headers and all). */
+    public function source(Request $r): void
+    {
+        [, $imap] = $this->open($r);
+        $uid = $r->intParam('uid');
+        $raw = $imap->fetchRaw($this->folderParam($r), $uid);
+        if ($r->query('download') === '1') {
+            Response::download($raw, "message-$uid.eml", 'message/rfc822');
+        }
+        Response::download($raw, "message-$uid.txt", 'text/plain; charset=utf-8', true);
     }
 
     /** GET /accounts/{id}/messages/{uid}/attachments/{index}?folder=INBOX&inline=1 */
@@ -433,6 +517,16 @@ final class MailController
             try {
                 $imap->setFlags((string) $payload['reply_folder'], [(int) $payload['reply_uid']], ['answered' => true]);
             } catch (Throwable) {
+            }
+        }
+
+        // "Remind me if nobody answers within … days".
+        $days = (int) ($payload['followup_days'] ?? 0);
+        if ($days > 0) {
+            try {
+                \Postvak\Mail\FollowUps::add((int) $account['id'], $raw, (string) $mail['subject'], $days);
+            } catch (Throwable $e) {
+                error_log('[postvak] follow-up not stored: ' . $e->getMessage());
             }
         }
 

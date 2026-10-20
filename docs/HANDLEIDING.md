@@ -67,12 +67,17 @@ balk met **Bijwerken**. Welke versie je hebt zie je onder **Instellingen → Alg
   <img src="handleiding/telefoon-bericht.png" width="240" alt="Een bericht op de telefoon">
 </p>
 
+**Offline lezen**: zet onder **Instellingen → Algemeen** de optie **Offline lezen op dit apparaat** aan. Postvak
+bewaart dan de berichten die je opent en de nieuwste berichten van je lijsten op dat apparaat. Zonder internet
+(in de trein, in het vliegtuig) kun je ze gewoon lezen; bovenin staat dan **Je bent offline**. Uitzetten wist
+de bewaarde berichten; uitloggen ook. Zet het alleen aan op een apparaat dat van jou is.
+
 ## 3. Het scherm
 
 Op de computer zie je drie kolommen:
 
 1. **Links**: de knop **Nieuw bericht**, je mappen (of bij meerdere accounts **Alle inboxen**), je labels en
-   onderaan Agenda, Taken, Contacten, Instellingen en Uitloggen.
+   onderaan hoe vol je mailbox is, Agenda, Bijlagen, Taken, Contacten, Instellingen en Uitloggen.
 2. **Midden**: de berichtenlijst. Bovenaan: zoeken, sorteren, vernieuwen en het menu **⋮** (alles als gelezen
    markeren, sneltoetsen).
 3. **Rechts**: het geopende bericht.
@@ -88,11 +93,36 @@ keer zijn, stel je in onder **Instellingen → Algemeen**.
 **Vernieuwen**: Postvak kijkt zelf elke minuut naar nieuwe mail. Op de telefoon kun je de lijst ook naar
 beneden trekken.
 
+**Opslag**: links onder je mappen zie je hoeveel ruimte je mailbox gebruikt, bijvoorbeeld *470 kB van 50 MB
+gebruikt*. Is hij bijna vol (90% of meer), dan wordt de balk rood. Ruim dan de prullenbak, spam en oude mail
+met grote bijlagen op (zie [Alle bijlagen op een rij](#alle-bijlagen-op-een-rij)). Niet elke mailserver geeft dit
+door; dan zie je de balk niet.
+
+### Inboxtabbladen
+
+<img src="handleiding/inbox-tabbladen.png" width="560" alt="De inbox met de tabbladen Primair, Reclame, Sociaal en Updates">
+
+Wil je, zoals in Gmail, je inbox opgesplitst zien? Zet dan onder **Instellingen → Algemeen** de
+**Inboxtabbladen** aan. Bovenaan de inbox verschijnen vier tabbladen:
+
+- **Primair**: mail van mensen, en alles wat niet in een ander tabblad hoort;
+- **Reclame**: nieuwsbrieven en aanbiedingen (mail met een afmeldlink);
+- **Sociaal**: meldingen van Facebook, LinkedIn, Instagram en dergelijke;
+- **Updates**: automatische berichten zoals orderbevestigingen, facturen en meldingen van systemen.
+
+De mail blijft gewoon in je inbox staan: de tabbladen zijn alleen een manier van kijken. Zoek je iets, dan zoekt
+Postvak in de hele inbox.
+
 ## 4. Mail lezen
 
 Klik of tik op een bericht om het te openen. Bovenaan staan de knoppen om het te archiveren, verwijderen,
 als spam te markeren, te snoozen, te verplaatsen, er een taak van te maken, labels te geven, als ongelezen te
 markeren of een ster te geven.
+
+Op een **telefoon** staan bovenaan alleen de drie meest gebruikte knoppen, extra groot: **archiveren**,
+**verwijderen** en **ongelezen**. Alle andere acties zitten onder **⋮** (meer acties), zoals in Gmail.
+
+<img src="handleiding/telefoon-menu-bericht.png" width="300" alt="Het menu met meer acties op de telefoon">
 
 - **Gesprekken**: antwoorden op elkaar staan bij elkaar, inclusief je eigen antwoorden uit Verzonden. Klik op
   een ingeklapt bericht om het te openen. (Uitzetten kan onder Instellingen → Algemeen.)
@@ -104,6 +134,41 @@ markeren of een ster te geven.
 - **Uitnodigingen** voor een afspraak verschijnen als kaartje met **Ja**, **Misschien** en **Nee**. Je antwoord
   gaat naar de organisator en de afspraak komt in je agenda.
 - **Afdrukken**: het printer-icoon onder het bericht.
+- **Origineel bekijken**: onder **⋮** (meer acties) zie je het bericht zoals het binnenkwam, met alle
+  technische kopregels. Met **Downloaden als .eml** bewaar je het als bestand, bijvoorbeeld om het aan je
+  beheerder of een helpdesk te sturen.
+
+### Waarschuwing bij verdachte mail
+
+<img src="handleiding/waarschuwing.png" width="560" alt="Een gele waarschuwing boven een bericht">
+
+Postvak kijkt bij elk bericht of de afzender is wie hij zegt te zijn. Klopt er iets niet, dan staat er een
+balk boven het bericht:
+
+- **Rood – Pas op: dit bericht is mogelijk vervalst**: de mailserver kon de afzender niet controleren, of het
+  domein van de afzender zegt zelf dat dit bericht niet van hen komt. Klik niet op links, open geen bijlagen en
+  geef nooit wachtwoorden of bankgegevens.
+- **Geel – Wees voorzichtig**: bijvoorbeeld als de naam van de afzender een ander e-mailadres laat zien dan
+  waar het bericht echt vandaan komt (zoals *klantenservice@bank.nl* &lt;iemand@gmail.com&gt;), of als een
+  antwoord naar een heel ander domein zou gaan.
+
+Twijfel je? Neem dan contact op met de afzender via een adres of telefoonnummer dat je zelf al had.
+
+### Uitschrijven van nieuwsbrieven
+
+<img src="handleiding/uitschrijven.png" width="560" alt="De knop Uitschrijven bij een nieuwsbrief">
+
+Bij nieuwsbrieven en reclamemail staat naast de afzender de knop **Uitschrijven**. Postvak meldt je dan met één
+klik af (bij de meeste afzenders zonder dat je een website hoeft te openen). Kan dat niet, dan opent Postvak de
+afmeldpagina van de afzender in een nieuw tabblad.
+
+### Herinnering: er kwam nog geen antwoord
+
+<img src="handleiding/opvolgen.png" width="560" alt="Een bericht dat terugkomt omdat er geen antwoord kwam">
+
+Heb je bij het versturen gekozen voor een herinnering (zie [Mail schrijven](#8-mail-schrijven)) en kwam er geen
+antwoord, dan staat jouw bericht weer bovenaan je inbox, met een ster. Bovenaan het bericht staat wanneer je het
+stuurde, met de knop **Opnieuw opvolgen** om meteen een vriendelijke herinnering te sturen.
 
 ## 5. Mail opruimen
 
@@ -125,6 +190,21 @@ markeren of een ster te geven.
   vandaag, morgen, dit weekend, volgende week of een eigen tijd). Gesnoozede mail staat in de map **Gesnoozed**.
 - **Prullenbak en spam leegmaken**: open de map en kies **Prullenbak legen** (of spam legen) bovenaan de lijst.
 - **Mappen** maken, hernoemen en verwijderen doe je onder **Instellingen → Mappen**.
+- **Rechtermuisknop**: klik op de computer met de rechtermuisknop op een bericht in de lijst voor een menu met
+  openen, beantwoorden, allen beantwoorden, doorsturen, archiveren, verwijderen, spam, (on)gelezen, ster, snoozen,
+  verplaatsen, labels, een taak of regel maken en meer van deze afzender. Heb je meerdere berichten geselecteerd,
+  dan werkt het menu op allemaal.
+- **Na verwijderen of archiveren**: standaard ga je terug naar de lijst. Onder **Instellingen → Algemeen** kun
+  je kiezen dat Postvak meteen het **volgende** (nieuwere) of **vorige** (oudere) bericht opent, handig als je
+  een stapel mail achter elkaar wegwerkt.
+- **Gesprek negeren**: zit je in een groepsmail die je niet meer wilt volgen? Kies onder **⋮** **Gesprek
+  negeren**. Het gesprek gaat naar het archief en nieuwe antwoorden komen niet meer in je inbox, maar gaan
+  gelezen naar het archief. Terugdraaien: open het gesprek in het archief en kies **Gesprek niet meer negeren**.
+- **Afzender blokkeren**: kies onder **⋮** **Afzender blokkeren**. Het bericht gaat naar de prullenbak en Postvak
+  maakt een regel, zodat ook toekomstige mail van dat adres meteen in de prullenbak belandt. Spijt? Klik op
+  **Ongedaan maken**, of verwijder de regel onder **Instellingen → Regels en afwezig**.
+
+<img src="handleiding/rechtermuisknop.png" width="560" alt="Het menu onder de rechtermuisknop">
 
 ## 6. Zoeken en filteren
 
@@ -140,6 +220,21 @@ Onder het zoekveld staan filters die je kunt combineren:
 - **Van: …**: verschijnt als je in een bericht op **Meer van deze afzender** klikt
 
 **Wissen** zet alle filters uit; de pijl terug sluit het zoeken.
+
+### Alle bijlagen op een rij
+
+<img src="handleiding/bijlagen.png" width="800" alt="Het overzicht van alle bijlagen">
+
+Zoek je dat ene pdf'je of die foto? Kies links **Bijlagen**. Je ziet alle bestanden uit een map, het nieuwste
+bovenaan, met de afzender, het onderwerp, de datum en de grootte.
+
+- Kies bovenaan het **account** en de **map**.
+- Met **Documenten**, **Afbeeldingen** en **Overig** zie je alleen dat soort bestanden.
+- Het zoekveld zoekt op **afzender of onderwerp**.
+- Klik op een bestand om het bericht te openen; daar open of download je de bijlage.
+
+Postvak haalt voor dit overzicht alleen de namen en groottes op, niet de bestanden zelf, dus het gaat snel en
+kost geen extra dataverbruik.
 
 ## 7. Labels
 
@@ -160,6 +255,10 @@ bericht kan meerdere labels hebben.
 Klik op **Nieuw bericht** (of druk op `c`). Begin bij **Aan** te typen: Postvak vult adressen aan uit je
 contacten en uit mensen die je eerder mailde.
 
+**Een hele groep mailen**: typ de naam van een groep uit je contacten (bijvoorbeeld *Werk* of *Band*). Bovenaan
+de suggesties staat de groep met 👥 en het aantal personen; kies hem en iedereen uit die groep staat erbij.
+Werkt bij **Aan**, **Cc** en **Bcc** (handig voor een groep die elkaars adres niet hoeft te zien).
+
 - **Opmaak**: kopjes, vet, cursief, onderstrepen, kleur, lijsten, citaat en links. Tekst uit Word plakt netjes.
 - **Bijlagen**: de paperclip, of sleep bestanden op het venster. Een plaatje kun je ook plakken.
 - **Van**: heb je meer adressen, kies dan bovenin vanaf welk adres je verstuurt. Bij een antwoord kiest Postvak
@@ -170,6 +269,10 @@ contacten en uit mensen die je eerder mailde.
   (instelbaar onder Instellingen → Algemeen).
 - **Later versturen**: het pijltje naast **Versturen** → kies een moment. Het bericht staat tot dan in de map
   **Gepland**.
+- **Herinner me als er geen antwoord komt**: het pijltje naast **Versturen** → kies onder
+  *Herinner me als er geen antwoord komt* na hoeveel dagen (1, 3 of 7). Naast de knop staat dan *Herinnering na … dag(en)*. Komt er in die tijd geen
+  antwoord, dan zet Postvak je bericht weer bovenaan je inbox (zie [Mail lezen](#herinnering-er-kwam-nog-geen-antwoord)).
+  Komt er wel een antwoord, dan gebeurt er niets.
 - **Sjablonen**: het sjablonen-icoon bovenin. Kies een sjabloon om de tekst in te voegen, of bewaar je huidige
   tekst als nieuw sjabloon.
 - **Ctrl + Enter** verstuurt het bericht.
@@ -185,11 +288,18 @@ nog even ongedaan maken.
 - Staan er meer mensen op het bericht? Klik dan op **Allen beantwoorden**.
 - Wil je toch opmaak of een bijlage? **Volledig venster** opent het gewone schrijfvenster met je tekst erin.
 
-### Handtekening met logo
+### Handtekeningen
 
-Onder **Instellingen → Accounts → Bewerken** stel je per adres een handtekening in, met opmaak en een
+Onder **Instellingen → Accounts → Bewerken** stel je per adres een of meer handtekeningen in, met opmaak en een
 afbeelding (bijvoorbeeld je bedrijfslogo). Het logo wordt in de mail zelf meegestuurd, zodat de ontvanger het
 meteen ziet.
+
+- Met **Handtekening toevoegen** maak je er nog een, bijvoorbeeld een uitgebreide **Zakelijk** en een **Kort**
+  voor snelle antwoorden. Geef ze een naam, zodat je ze makkelijk herkent.
+- Kies welke handtekening **standaard bij nieuwe berichten** komt en welke **bij antwoorden en doorsturen** (of
+  **Geen handtekening**).
+- In het schrijfvenster wissel je met het handtekening-icoon bovenin van handtekening; de oude wordt dan
+  vervangen.
 
 ## 9. Grote bestanden versturen
 
@@ -244,6 +354,11 @@ Kies links **Agenda**. Je hebt een maand-, week-, dag- en lijstweergave.
   herhaling (bijv. elke week) en herinnering instellen. Herinneringen komen als melding op je telefoon of
   computer.
 - **Meerdere agenda's**: maak er meer aan onder **Instellingen → Agenda en taken**, ieder met een eigen kleur.
+- **Verjaardagen**: de verjaardagen van je contactpersonen staan vanzelf in de agenda, als hele-dag-item (met de
+  leeftijd als je het geboortejaar weet). Klik erop om het contact te openen. Met het knopje **Verjaardagen**
+  bovenaan verberg je ze even; helemaal uitzetten kan onder **Instellingen → Agenda en taken**.
+
+<img src="handleiding/verjaardagen.png" width="800" alt="De maandweergave met een verjaardag">
 - **Uitnodigingen** die je per mail krijgt, beantwoord je vanuit het bericht (zie [Mail lezen](#4-mail-lezen)).
 - **Agenda van elders** (bijvoorbeeld Google, Outlook, je sportclub of de feestdagen): plak het iCal-adres onder
   Instellingen → Agenda en taken → **Agenda van elders toevoegen**. Postvak haalt hem elk half uur op; je kunt
@@ -263,12 +378,26 @@ taak. Van een mail maak je met één klik een taak: het vinkje-icoon bovenaan ee
 
 <img src="handleiding/contacten.png" width="800" alt="Contacten">
 
-Kies links **Contacten**. Je kunt contacten toevoegen, bewerken, favoriet maken en zoeken.
+Kies links **Contacten**. Net als bij Google Contacten heeft elk contact een eigen kaart met:
 
+- een **foto**, **voornaam en achternaam**, bijnaam, **bedrijf, functie en afdeling**;
+- meerdere **e-mailadressen** en **telefoonnummers**, elk met een soort (privé, werk, mobiel, …);
+- **adressen** (met een link naar de kaart), een **verjaardag** (ook zonder jaar), **websites** en **notities**;
+- **groepen**, zoals Familie, Werk of Band. Klik bovenaan de lijst op een groep om alleen die contacten te zien.
+
+Met **Mail sturen** en **Bellen** neem je direct contact op. Wie de komende week jarig is, staat bovenaan de
+lijst onder **Binnenkort jarig**. Zoeken werkt op naam, adres, telefoon, bedrijf, plaats en groep.
+
+<img src="handleiding/contact-bewerken.png" width="640" alt="Een contact bewerken">
+
+- **Bewerken**: klik op **Bewerken** op de kaart. Met **+ E-mailadres toevoegen**, **+ Telefoonnummer
+  toevoegen** enzovoort voeg je extra regels toe; met **Foto toevoegen** kies je een foto (Postvak maakt hem
+  vierkant en klein).
 - **Importeren en exporteren** gaat met vCard-bestanden (.vcf), bijvoorbeeld uit Google Contacten, Outlook of je
-  telefoon.
+  telefoon. Bedrijf, adressen, verjaardag en groepen komen mee.
 - **Alle adressen** laat ook mensen zien die Postvak automatisch onthield toen je ze mailde.
-- Vanuit een contact start je met één klik een nieuw bericht.
+- Alles, ook de foto, synchroniseert met de contacten-app op je telefoon (zie
+  [hoofdstuk 15](#15-agenda-taken-en-contacten-op-je-telefoon)).
 
 ## 15. Agenda, taken en contacten op je telefoon
 
@@ -310,16 +439,16 @@ Klik links onderaan op **Instellingen**.
 
 | Tabblad | Wat stel je hier in |
 | --- | --- |
-| **Algemeen** | Taal, hoe vaak Postvak naar nieuwe mail kijkt, berichten per keer laden (telefoon/tablet en computer), Alle inboxen, gesprekken, versturen ongedaan maken, als gelezen markeren bij openen, versie en updates, uitloggen |
+| **Algemeen** | Taal, hoe vaak Postvak naar nieuwe mail kijkt, berichten per keer laden (telefoon/tablet en computer), offline lezen, inboxtabbladen, wat er gebeurt na verwijderen of archiveren, Alle inboxen, gesprekken, versturen ongedaan maken, als gelezen markeren bij openen, versie en updates, uitloggen |
 | **Weergave** | Licht of donker, accentkleur, tekstgrootte, ruim of compact, labels beheren |
 | **Vegen** | Wat naar links en naar rechts vegen doet, hoe lang Ongedaan maken blijft staan, bevestiging bij verwijderen |
 | **Meldingen** | Meldingen op dit apparaat, per account aan of uit, testmelding |
 | **Regels en afwezig** | Regels voor nieuwe mail en de afwezigheidsmelding |
-| **Agenda en taken** | Agenda's en takenlijsten, agenda's van elders, deellinks, synchroniseren met je telefoon |
+| **Agenda en taken** | Verjaardagen tonen, agenda's en takenlijsten, agenda's van elders, deellinks, synchroniseren met je telefoon |
 | **Privacy** | Externe afbeeldingen, veilige afzenders, grote bestanden (downloadlinks) |
 | **Beveiliging** | Tweestapsverificatie aan of uit, herstelcodes, onthouden apparaten |
 | **Mappen** | Mappen maken, hernoemen en verwijderen |
-| **Accounts** | Mailadressen toevoegen, naam, kleur en handtekening |
+| **Accounts** | Mailadressen toevoegen, naam, kleur en handtekeningen |
 | **Over Postvak** | Versie, wie Postvak maakt, licentie en links |
 
 <p align="center">
@@ -392,6 +521,13 @@ dan je beheerder of de cronjob draait.
 **Mijn regel of afwezigheidsmelding doet niets.**
 Die worden elke paar minuten door de cronjob uitgevoerd. Bij de regels zie je hoe vaak een regel is toegepast;
 staat er een waarschuwing over de achtergrondtaak, waarschuw dan je beheerder.
+
+**Mijn mailbox is (bijna) vol.**
+Kijk links onderaan hoeveel ruimte je gebruikt. Leeg de prullenbak en spam, en zoek onder **Bijlagen** naar grote
+bestanden die je niet meer nodig hebt. Meer ruimte nodig? Dat regelt je beheerder of hostingpartij.
+
+**Een nieuwsbrief blijft komen, ook na uitschrijven.**
+Afmelden kan bij sommige afzenders een paar dagen duren. Blijft het komen, kies dan **⋮ → Afzender blokkeren**.
 
 **Een bijlage is te groot.**
 Boven 10 MB maakt Postvak er vanzelf een downloadlink van (zie [hoofdstuk 9](#9-grote-bestanden-versturen)).

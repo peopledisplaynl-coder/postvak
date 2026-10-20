@@ -5,6 +5,7 @@ import AppIcon from '../components/AppIcon.vue'
 import EventEditor from '../components/EventEditor.vue'
 import { api } from '../api/client.js'
 import { useToasts } from '../stores/toasts.js'
+import { useSession } from '../stores/session.js'
 import {
   timeZone, ymd, parseYmd, addDays, addMonths, startOfWeek, monthGrid, byDay, layoutDay, nextHalfHour,
 } from '../calendar.js'
@@ -85,6 +86,7 @@ async function loadEvents() {
 }
 
 onMounted(async () => {
+  loadContacts()
   await loadCalendars()
   await loadEvents()
   scrollToMorning()
@@ -97,9 +99,50 @@ watch(() => route.query.date, (d) => {
   }
 })
 
-const visibleEvents = computed(() => events.value.filter((e) => !hidden.value.has(e.calendar_id)))
+// Birthdays of saved contacts, shown as all-day items (not stored in a calendar, so not on phones over CalDAV).
+const session = useSession()
+const BIRTHDAYS = 'birthdays'
+const contacts = ref([])
+const showBirthdays = computed(() => session.settings?.show_birthdays !== false)
+async function loadContacts() {
+  if (!showBirthdays.value || contacts.value.length) return
+  try {
+    contacts.value = (await api.get('/contacts/list', { saved: 1 })).filter((c) => c.details?.birthday)
+  } catch {
+    // birthdays are a nicety; the calendar works without them
+  }
+}
+watch(showBirthdays, loadContacts)
+const birthdayEvents = computed(() => {
+  if (!showBirthdays.value || hidden.value.has(BIRTHDAYS)) return []
+  const out = []
+  const first = range.value.start.getFullYear()
+  const last = range.value.end.getFullYear()
+  for (const c of contacts.value) {
+    const m = /^(\d{4}|-)-(\d{2})-(\d{2})$/.exec(c.details.birthday)
+    if (!m) continue
+    for (let y = first; y <= last; y++) {
+      const date = new Date(y, Number(m[2]) - 1, Number(m[3]))
+      if (date.getMonth() !== Number(m[2]) - 1) continue // 29 February in a non-leap year
+      if (date < range.value.start || date >= range.value.end) continue
+      const name = c.name || c.email
+      const age = m[1] !== '-' ? y - Number(m[1]) : null
+      out.push({
+        key: `bday-${c.id}-${y}`, birthday: true, contact_id: c.id, calendar_id: BIRTHDAYS, color: '#DB2777', all_day: true,
+        start: ymd(date), end: ymd(addDays(date, 1)),
+        title: age !== null && age > 0 ? t('calendar.birthdayAge', { name, age }) : t('calendar.birthday', { name }),
+      })
+    }
+  }
+  return out
+})
+const visibleEvents = computed(() => [...events.value.filter((e) => !hidden.value.has(e.calendar_id)), ...birthdayEvents.value])
 const perDay = computed(() => byDay(visibleEvents.value))
 const eventCalendars = computed(() => calendars.value.filter((c) => c.type !== 'tasks'))
+const calendarChips = computed(() => [
+  ...eventCalendars.value,
+  ...(showBirthdays.value && contacts.value.length ? [{ id: BIRTHDAYS, name: t('calendar.birthdays'), color: '#DB2777' }] : []),
+])
 
 function toggleCalendar(id) {
   const next = new Set(hidden.value)
@@ -217,6 +260,7 @@ function newEvent(day = null) {
   editor.value = { start, allDay: false }
 }
 function openEvent(ev) {
+  if (ev.birthday) return router.push({ name: 'contacts', query: { id: ev.contact_id } })
   editor.value = { event: ev }
 }
 async function onSaved(info) {
@@ -291,7 +335,7 @@ const chipStyle = (ev) => ({ background: `color-mix(in srgb, ${ev.color} 16%, va
         </div>
         <div class="flex min-w-0 flex-1 gap-1 overflow-x-auto">
           <button
-            v-for="c in eventCalendars" :key="c.id"
+            v-for="c in calendarChips" :key="c.id"
             class="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ring-1 ring-line"
             :class="hidden.has(c.id) ? 'text-muted' : ''"
             :aria-pressed="!hidden.has(c.id)"

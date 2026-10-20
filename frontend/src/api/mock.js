@@ -52,18 +52,52 @@ const accounts = [
 let settings = {
   swipe_left: 'trash', swipe_right: 'archive', confirm_delete: false, undo_seconds: 5,
   theme: 'system', density: 'comfortable', show_images: 'ask', reading_pane: 'right',
-  poll_seconds: 60, unified_inbox: true, mark_read_on_open: true, sort: 'date_desc', accent: 'indigo', text_size: 'normal', page_size: 50, page_size_mobile: 25,
+  poll_seconds: 60, unified_inbox: true, mark_read_on_open: true, sort: 'date_desc', accent: 'indigo', text_size: 'normal', page_size: 50, page_size_mobile: 25, inbox_tabs: false, after_delete: 'list', show_birthdays: true,
   labels: [['$label1', '#D23F3F'], ['$label2', '#E07B1A'], ['$label3', '#0F8A5F'], ['$label4', '#2C7DA0'], ['$label5', '#7A5AC8']].map(([key, color]) => ({ key, name: '', color })),
 }
 
 const senders = D.senders
-const contactsDb = senders.map(([name, email], i) => ({
-  id: i + 1, name, email, phone: i % 3 ? '' : '06 1234 56' + String(i).padStart(2, '0'), notes: '', favorite: i === 0,
-  saved: i % 2 === 0, times_used: i + 1, last_used_at: new Date(Date.now() - i * 86400000).toISOString(),
-  other_emails: i === 0 ? [email.replace('@', '.work@')] : [], synced: i === 0,
-}))
+/** Contact details as the API returns them (Contacts\\ContactDetails). */
+function mockDetails(c, extra = {}) {
+  const [given, ...rest] = (c.name || '').split(' ')
+  return {
+    given: rest.length ? given : c.name || '', family: rest.join(' '), nickname: '', company: '', department: '', title: '',
+    emails: [c.email, ...(c.other_emails ?? [])].filter(Boolean).map((value, i) => ({ value, type: i ? 'work' : 'home' })),
+    phones: c.phone ? [{ value: c.phone, type: 'mobile' }] : [], addresses: [], birthday: '', websites: [], groups: [], ...extra,
+  }
+}
+const soon = (days) => { const d = new Date(Date.now() + days * 86400000); return `1985-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const contactsDb = senders.map(([name, email], i) => {
+  const c = {
+    id: i + 1, name, email, phone: i % 3 ? '' : '06 1234 56' + String(i).padStart(2, '0'), notes: '', favorite: i === 0,
+    saved: i % 2 === 0, times_used: i + 1, last_used_at: new Date(Date.now() - i * 86400000).toISOString(),
+    other_emails: i === 0 ? [email.replace('@', '.work@')] : [], synced: i === 0, photo_url: null,
+  }
+  c.details = mockDetails(c, i === 0
+    ? {
+        company: 'PeopleDisplay', title: nl ? 'Teamleider' : 'Team lead', birthday: soon(3), groups: [nl ? 'Werk' : 'Work', 'Band'],
+        addresses: [{ street: nl ? 'Stationsstraat 12' : '12 Station Road', postal_code: nl ? '5126 AB' : 'OX1 2AB', city: nl ? 'Gilze' : 'Oxford', region: '', country: nl ? 'Nederland' : 'United Kingdom', type: 'home' }],
+        websites: [{ value: 'https://peopledisplay.nl' }],
+      }
+    : i === 2 ? { company: nl ? 'Hosting BV' : 'Hosting Ltd', title: 'Support', groups: [nl ? 'Werk' : 'Work'] } : {})
+  return c
+})
 // A card that came from a phone without an e-mail address.
-contactsDb.push({ id: 99, name: nl ? 'Loodgieter Kees' : 'Plumber Joe', email: '', phone: '06 9876 5432', notes: '', favorite: false, saved: true, times_used: 0, last_used_at: null, other_emails: [], synced: true })
+contactsDb.push({ id: 99, name: nl ? 'Loodgieter Kees' : 'Plumber Joe', email: '', phone: '06 9876 5432', notes: '', favorite: false, saved: true, times_used: 0, last_used_at: null, other_emails: [], synced: true, photo_url: null })
+contactsDb.at(-1).details = mockDetails(contactsDb.at(-1), { groups: [nl ? 'Huis' : 'Home'] })
+
+/** Like the server: the full details also fill name, e-mail and phone. */
+function applyDetails(c, body) {
+  Object.assign(c, body)
+  if (body.details) {
+    const d = body.details
+    c.name = `${d.given} ${d.family}`.trim() || d.company
+    c.email = d.emails[0]?.value ?? ''
+    c.other_emails = d.emails.slice(1).map((e) => e.value)
+    c.phone = d.phones[0]?.value ?? ''
+  }
+  return c
+}
 
 // Meeting invitations in the demo (one per message with the "rehearsal times" subject).
 const invitations = {}
@@ -93,9 +127,16 @@ function makeMessages(accountId, folder, count) {
       date: new Date(now - i * 1000 * 60 * 47).toISOString(),
       seen: i > 3 && i % 5 !== 0, flagged: i % 9 === 2, labels: i === 1 ? ['$label1'] : i === 4 ? ['$label2', '$label4'] : [], answered: i % 7 === 3, has_attachments: i % 4 === 1,
       snippet: D.snippets[i % 4],
+      // Inbox tab, as the server works it out from the headers (see Mail\\MessageInsights::category).
+      category: /^noreply@(winkel|shop)/.test(email) ? 'promotions' : /^(noreply|support)@/.test(email) ? 'updates' : /^planning@/.test(email) && i % 2 ? 'social' : 'primary',
+      followup: false,
     }
-  })
+  }).map((m, i) => (folder === 'INBOX' && accountId === 1 && i === 5
+    // "Remind me if nobody answers": the cron job put the sent message back in the inbox.
+    ? { ...m, from: { name: accounts[0].display_name || '', email: accounts[0].email }, to: [{ name, email: senders[2][1] }], followup: true, category: 'primary' }
+    : m))
 }
+const mutedMock = new Set()
 
 /** The search filters of the list request (filter=unseen,flagged,attachment&since=7&from=…). */
 function applyFilters(list, query) {
@@ -105,6 +146,7 @@ function applyFilters(list, query) {
   if (flags.includes('attachment')) list = list.filter((x) => x.has_attachments)
   if (query.since) list = list.filter((x) => Date.parse(x.date) > Date.now() - Number(query.since) * 86400000)
   if (query.from) list = list.filter((x) => x.from.email.toLowerCase() === String(query.from).toLowerCase())
+  if (query.category) list = list.filter((x) => x.category === query.category)
   return list
 }
 
@@ -242,17 +284,32 @@ export async function mockRequest(method, path, { body = {}, query = {}, form = 
   if (path.startsWith('/security/')) return { enabled: false, enabled_at: null, recovery_left: 0, devices: [] }
   if (path === '/push') return { public_key: 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U', devices: 0, cron: { last_run: null, ok: false } }
   if (path.startsWith('/push/')) return { devices: 1, sent: true }
-  if (path === '/contacts/list') return contactsDb.filter((c) => !query.saved || c.saved)
+  if (path === '/contacts/list') return JSON.parse(JSON.stringify(contactsDb.filter((c) => !query.saved || c.saved)))
   if (path === '/contacts/import') return { cards: 0, added: 0, updated: 0, skipped: 0 }
   if (path === '/contacts' && method === 'POST') {
-    if (contactsDb.some((c) => c.email === body.email && c.saved)) throw Object.assign(new Error('This address is already in your contacts'), { status: 409 })
-    const c = { id: contactsDb.length + 1, name: '', phone: '', notes: '', favorite: false, times_used: 0, last_used_at: null, ...body, saved: true }
+    const email = body.details?.emails?.[0]?.value ?? body.email
+    if (email && contactsDb.some((c) => c.email === email && c.saved)) throw Object.assign(new Error('This address is already in your contacts'), { status: 409 })
+    const c = applyDetails({ id: Math.max(...contactsDb.map((x) => x.id)) + 1, name: '', phone: '', notes: '', favorite: false, times_used: 0, last_used_at: null, other_emails: [], photo_url: null, saved: true }, body)
+    if (!c.details) c.details = mockDetails(c)
     contactsDb.push(c)
-    return c
+    return JSON.parse(JSON.stringify(c))
   }
-  if (path.startsWith('/contacts/') && method === 'PATCH') return Object.assign(contactsDb.find((c) => c.id === Number(path.split('/')[2])), body, { saved: true })
+  const photoMatch = path.match(/^\/contacts\/(\d+)\/photo$/)
+  if (photoMatch) {
+    const c = contactsDb.find((x) => x.id === Number(photoMatch[1]))
+    c.photo_url = method === 'POST' ? URL.createObjectURL(form.get('file')) : null
+    return JSON.parse(JSON.stringify(c))
+  }
+  if (path.startsWith('/contacts/') && method === 'PATCH') {
+    return JSON.parse(JSON.stringify(applyDetails(contactsDb.find((x) => x.id === Number(path.split('/')[2])), { ...body, saved: true })))
+  }
   if (path.startsWith('/contacts/') && method === 'DELETE') { contactsDb.splice(contactsDb.findIndex((c) => c.id === Number(path.split('/')[2])), 1); return null }
-  if (path === '/contacts') return senders.filter(([n, e]) => (n + e).toLowerCase().includes((query.q || '').toLowerCase())).map(([name, email]) => ({ name, email }))
+  if (path === '/contacts') {
+    const q = (query.q || '').toLowerCase()
+    const groups = new Map()
+    for (const c of contactsDb) for (const g of c.details?.groups ?? []) if (c.email && g.toLowerCase().includes(q)) groups.set(g, [...(groups.get(g) ?? []), { email: c.email, name: c.name }])
+    return [...[...groups].map(([group, members]) => ({ group, members })), ...senders.filter(([n, e]) => (n + e).toLowerCase().includes(q)).map(([name, email]) => ({ name, email }))]
+  }
   if (path === '/accounts' && method === 'POST') {
     const acc = { ...accounts[1], id: accounts.length + 1, email: body.email, display_name: body.display_name || '', color: '#C98A06', is_login: false }
     accounts.push(acc)
@@ -264,6 +321,7 @@ export async function mockRequest(method, path, { body = {}, query = {}, form = 
   if (sub === '/folders' && method === 'POST') { extraFolders.push(body.name); return { path: body.name, folders: folders(id) } }
   if (sub === '/folders' && method === 'PATCH') { const i = extraFolders.indexOf(body.path); if (i >= 0) extraFolders[i] = body.name; return { path: body.name, folders: folders(id) } }
   if (sub === '/folders' && method === 'DELETE') { const p = new URLSearchParams(path.split('?')[1]).get('path'); extraFolders.splice(extraFolders.indexOf(p), 1); return { folders: folders(id) } }
+  if (sub === '/quota') return id === 1 ? { used: 812 * 1024 * 1024, limit: 1024 * 1024 * 1024 } : { used: 120 * 1024 * 1024, limit: 2048 * 1024 * 1024 }
   if (sub === '/folders/empty' && method === 'POST') { const b = box(id, body.path); const n = b.length; b.splice(0); return { deleted: n } }
   if (sub.startsWith('/folders')) return folders(id)
 
@@ -314,6 +372,36 @@ export async function mockRequest(method, path, { body = {}, query = {}, form = 
              <p>${D.bye},<br>${msg.from.name}</p>`,
       attachments: msg.has_attachments ? [{ index: 0, name: D.attachment, mime: 'application/pdf', size: 184320, inline: false, url: '#' }] : [],
       invitation: invitationFor(msg),
+      unsubscribe: msg.category === 'promotions',
+      authenticity: msg.uid === 993 && msg.account_id === 1
+        ? { level: 'caution', reasons: ['name_shows_other_address'], spf: 'pass', dkim: 'none', dmarc: null }
+        : { level: null, reasons: [], spf: 'pass', dkim: 'pass', dmarc: 'pass' },
+      muted: mutedMock.has(`${id}:${msg.uid}`),
+    }
+  }
+  const unsub = sub.match(/^\/messages\/(\d+)\/unsubscribe$/)
+  if (unsub && method === 'POST') return { done: true, method: 'one_click' }
+  const mute = sub.match(/^\/messages\/(\d+)\/mute$/)
+  if (mute && method === 'POST') {
+    const key = `${id}:${mute[1]}`
+    body.muted === false ? mutedMock.delete(key) : mutedMock.add(key)
+    return { muted: body.muted !== false }
+  }
+  if (sub === '/attachments') {
+    const files = [
+      [D.attachment, 'application/pdf', 184320], ['offerte-2026.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 48213],
+      ['podium.jpg', 'image/jpeg', 1265620], ['planning.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 22100],
+      ['zaal.png', 'image/png', 845000], ['contract.zip', 'application/zip', 2400000],
+    ]
+    const list = box(id, query.folder || 'INBOX').filter((x) => x.has_attachments)
+      .filter((x) => !query.q || (x.subject + x.from.name + x.from.email).toLowerCase().includes(String(query.q).toLowerCase()))
+    const page = Number(query.page || 1)
+    return {
+      total: list.length, page, per_page: 25,
+      items: list.slice((page - 1) * 25, page * 25).map((m, i) => ({
+        message: m,
+        attachments: (i % 3 === 2 ? [files[(i + 1) % 6], files[(i + 2) % 6]] : [files[i % 6]]).map(([name, mime, size]) => ({ name, mime, size })),
+      })),
     }
   }
   const invite = sub.match(/^\/messages\/(\d+)\/invitation$/)

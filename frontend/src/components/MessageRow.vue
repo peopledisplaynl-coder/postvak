@@ -13,7 +13,7 @@ const props = defineProps({
   message: { type: Object, required: true },
   active: { type: Boolean, default: false },
 })
-const emit = defineEmits(['open'])
+const emit = defineEmits(['open', 'context'])
 
 const session = useSession()
 const mail = useMail()
@@ -87,6 +87,7 @@ function quick(action) {
 let pressTimer = null
 let pressStart = null
 let longPressed = false
+let lastPointer = 'mouse'
 let dragged = false // pointer moved: the following click is not a tap
 
 // ---- drag to a folder (mouse only: touch uses swipe and long press)
@@ -122,6 +123,7 @@ function onDragend() {
 }
 
 function onPointerdown(e) {
+  lastPointer = e.pointerType
   draggable.value = e.pointerType === 'mouse' && e.button === 0
   swipe.onPointerdown(e)
   dragged = false
@@ -150,6 +152,13 @@ function onPointercancel(e) {
   clearTimeout(pressTimer)
   swipe.onPointercancel(e)
 }
+/** Right-click (mouse only; on a touch screen a long press selects instead). */
+function onContextmenu(e) {
+  e.preventDefault()
+  if (lastPointer !== 'mouse') return
+  emit('context', { message: props.message, x: e.clientX, y: e.clientY })
+}
+
 function onClick() {
   // The click that ends a long press or a swipe is not a tap.
   if (longPressed) {
@@ -204,6 +213,7 @@ function onClick() {
       @pointerup="onPointerup"
       @pointercancel="onPointercancel"
       @click="onClick"
+      @contextmenu="onContextmenu"
       @keydown.enter="onClick"
       @keydown.space.prevent="mail.toggleSelect(key)"
     >

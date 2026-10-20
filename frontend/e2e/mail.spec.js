@@ -160,13 +160,22 @@ test('compose: insert a template and save a new one', async ({ page }) => {
   await expect(page.getByText('Sjabloon "Mijn sjabloon" opgeslagen')).toBeVisible()
 })
 
-test('labels: give a message a label and filter on it', async ({ page }) => {
+test('labels: give a message a label and filter on it', async ({ page, isMobile }) => {
   await login(page)
   await rows(page).nth(2).locator('[role=button]').click()
   await page.locator('article h2').first().waitFor()
-  await page.getByTitle('Labels').first().click()
-  await page.getByRole('menuitemcheckbox', { name: 'Persoonlijk' }).click()
-  await page.mouse.click(5, 300) // outside the menu closes it
+  if (isMobile) {
+    // On a phone the labels are in the ⋮ menu.
+    await page.getByRole('button', { name: 'Meer acties' }).click()
+    await page.getByRole('menuitem', { name: 'Labels' }).click()
+    await page.getByRole('menuitemcheckbox', { name: 'Persoonlijk' }).click()
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+  } else {
+    await page.getByTitle('Labels').first().click()
+    await page.getByRole('menuitemcheckbox', { name: 'Persoonlijk' }).click()
+    await page.mouse.click(5, 300) // outside the menu closes it
+  }
   await expect(page.locator('article').getByText('Persoonlijk')).toBeVisible()
   await page.goBack()
   await expect(rows(page).first()).toBeVisible()
@@ -290,4 +299,152 @@ test('deleting the open message from the list also closes the reader', async ({ 
   // Undo puts it back in the list.
   await page.getByRole('button', { name: 'Ongedaan maken' }).click()
   await expect.poll(() => rows(page).count()).toBe(count)
+})
+
+test('right-click menu on a message in the list', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'right-click is a desktop feature')
+  await login(page)
+  const row = rows(page).nth(2)
+  await row.locator('[role=button]').click({ button: 'right' })
+  const menu = page.getByRole('menu')
+  await expect(menu.getByRole('menuitem', { name: 'Beantwoorden', exact: true })).toBeVisible()
+  await menu.getByRole('menuitem', { name: 'Labels' }).click()
+  await menu.getByRole('menuitemcheckbox', { name: 'Werk' }).click()
+  await expect(menu.getByRole('menuitemcheckbox', { name: 'Werk' })).toHaveAttribute('aria-checked', 'true')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await expect(row).toContainText('Werk')
+  // Reply from the menu opens the composer with "Re:".
+  await row.locator('[role=button]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Beantwoorden', exact: true }).click()
+  await expect(page.locator('form input[placeholder="Onderwerp"]')).toHaveValue(/^Re: /)
+})
+
+test('phone: bigger toolbar with a ⋮ menu for the other actions', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'the ⋮ menu is for small screens')
+  await login(page)
+  await rows(page).nth(1).locator('[role=button]').click()
+  await expect(page.getByRole('button', { name: 'Archiveren' })).toBeVisible()
+  await expect(page.locator('header button[title="Verplaatsen naar map"]')).toBeHidden()
+  await page.getByRole('button', { name: 'Meer acties' }).click()
+  await expect(page.getByRole('menuitem', { name: 'Snoozen' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: 'Verplaatsen naar map' })).toBeVisible()
+  await page.getByRole('menuitem', { name: 'Ster geven' }).click()
+  await expect(page.getByRole('menu')).toHaveCount(0)
+})
+
+test('contacts: full card with company, phones, address, birthday and groups', async ({ page, isMobile }) => {
+  await login(page)
+  await page.goto('/contacts')
+  // The card of a contact with details.
+  await page.getByRole('button', { name: /Marieke de Vries/ }).first().click()
+  await expect(page.getByRole('heading', { name: 'Marieke de Vries' })).toBeVisible()
+  await expect(page.getByText('Teamleider · PeopleDisplay').last()).toBeVisible()
+  await expect(page.getByText('Gilze')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Op de kaart' })).toBeVisible()
+
+  // A new contact with the full form (on a phone: back to the list first).
+  if (isMobile) await page.locator('button[aria-label="Terug"]:visible').first().click()
+  await page.getByTitle('Nieuw contact').click()
+  await page.getByLabel('Voornaam').fill('Sanne')
+  await page.getByLabel('Achternaam').fill('Bakker')
+  await page.getByRole('button', { name: '+ Bedrijf en functie' }).click()
+  await page.getByLabel('Bedrijf').fill('Bakkerij Bakker')
+  await page.getByLabel('Functie').fill('Eigenaar')
+  await page.getByLabel('E-mailadres').first().fill('sanne@bakkerij.example')
+  await page.getByRole('button', { name: '+ Telefoonnummer toevoegen' }).click()
+  await page.getByLabel('Telefoon', { exact: true }).nth(1).fill('013 123 45 67')
+  await page.getByLabel('Soort').nth(2).selectOption('work')
+  await page.getByRole('button', { name: '+ Adres toevoegen' }).click()
+  await page.getByLabel('Straat en huisnummer').fill('Kerkstraat 5')
+  await page.getByLabel('Plaats').fill('Tilburg')
+  await page.getByLabel('Verjaardag').fill('1990-07-01')
+  await page.getByRole('combobox', { name: 'Groepen' }).fill('Leveranciers')
+  await page.keyboard.press('Enter')
+  await page.getByRole('button', { name: 'Opslaan' }).click()
+  await expect(page.getByRole('heading', { name: 'Sanne Bakker' })).toBeVisible()
+  await expect(page.getByText('Eigenaar · Bakkerij Bakker').last()).toBeVisible()
+  await expect(page.getByRole('link', { name: '013 123 45 67' })).toBeVisible()
+  await expect(page.getByText('Kerkstraat 5')).toBeVisible()
+  await expect(page.getByText(/1 juli 1990/)).toBeVisible()
+})
+
+/** Navigate inside the app (a page load would reset the demo data). */
+async function goInApp(page, path) {
+  await page.evaluate((p) => { history.pushState({}, '', p); dispatchEvent(new PopStateEvent('popstate')) }, path)
+}
+
+test('inbox tabs: Primary, Promotions, Social and Updates', async ({ page }) => {
+  await login(page)
+  await goInApp(page, '/settings')
+  await page.getByRole('checkbox', { name: /Inboxtabbladen/ }).check()
+  await goInApp(page, '/')
+  const tabs = page.getByRole('tablist', { name: 'Inboxtabbladen' })
+  await expect(tabs.getByRole('tab', { name: 'Primair' })).toHaveAttribute('aria-selected', 'true')
+  const primary = await rows(page).count()
+  await tabs.getByRole('tab', { name: 'Reclame' }).click()
+  await expect(tabs.getByRole('tab', { name: 'Reclame' })).toHaveAttribute('aria-selected', 'true')
+  await expect.poll(() => rows(page).count()).not.toBe(primary)
+})
+
+test('a contact group as recipient adds all its members', async ({ page }) => {
+  await login(page)
+  await page.getByRole('button', { name: 'Nieuw bericht' }).first().click()
+  await page.locator('form input').first().fill('Werk')
+  await page.getByText('👥 Werk').click()
+  await expect(page.getByRole('button', { name: /verwijderen$/ })).not.toHaveCount(0)
+  expect(await page.getByRole('button', { name: /verwijderen$/ }).count()).toBeGreaterThan(1)
+})
+
+test('follow-up reminder: banner when no reply came', async ({ page }) => {
+  await login(page)
+  // The demo has one sent message that came back because nobody answered.
+  await goInApp(page, '/mail/1?folder=INBOX&uid=995&acc=1')
+  await expect(page.getByText('kreeg nog geen antwoord')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Opnieuw opvolgen' })).toBeVisible()
+})
+
+test('unsubscribe, block sender and the original message', async ({ page, isMobile }) => {
+  page.on('dialog', (d) => d.accept())
+  await login(page)
+  await page.getByRole('button', { name: 'Nieuw bericht' }).first().waitFor()
+  // A mailing (promotions) has an "Unsubscribe" button.
+  const promo = rows(page).filter({ hasText: /Webwinkel|Winkel|Shop/i }).first()
+  await promo.locator('[role=button]').click()
+  await page.getByRole('button', { name: 'Uitschrijven' }).click()
+  await expect(page.getByText(/Je bent uitgeschreven/)).toBeVisible()
+  // Block the sender from the ⋮ menu.
+  await page.getByRole('button', { name: 'Meer acties' }).first().click()
+  await expect(page.getByRole('menuitem', { name: 'Origineel bekijken' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: 'Gesprek negeren' })).toBeVisible()
+  await page.getByRole('menuitem', { name: 'Afzender blokkeren' }).click()
+  await expect(page.getByText(/gaat voortaan naar de prullenbak/)).toBeVisible()
+  if (!isMobile) await expect(page).not.toHaveURL(/uid=/)
+})
+
+test('after deleting: open the next message', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'the toolbar delete is the same on phones; checked on desktop')
+  await login(page)
+  await goInApp(page, '/settings')
+  await page.getByRole('combobox').filter({ hasText: 'Terug naar de lijst' }).selectOption('next')
+  await goInApp(page, '/')
+  await rows(page).nth(2).locator('[role=button]').click()
+  await expect(page).toHaveURL(/uid=/)
+  const before = new URL(page.url()).search
+  await page.locator('header button[title="Verwijderen"]').first().click()
+  await expect.poll(() => new URL(page.url()).search).not.toBe(before)
+  await expect(page).toHaveURL(/uid=\d+/)
+})
+
+test('attachments overview and storage bar', async ({ page, isMobile }) => {
+  await login(page)
+  if (!isMobile) await expect(page.getByText(/van 1 GB gebruikt|van 1,0 GB gebruikt|gebruikt/).first()).toBeVisible()
+  await goInApp(page, '/attachments')
+  await expect(page.getByRole('heading', { name: 'Bijlagen' })).toBeVisible()
+  await expect(page.getByText('zaal.png').first()).toBeVisible()
+  await page.getByRole('tab', { name: 'Afbeeldingen' }).click()
+  await expect(page.getByText('planning.xlsx')).toHaveCount(0)
+  await page.getByText('zaal.png').first().click()
+  await expect(page).toHaveURL(/uid=/)
 })

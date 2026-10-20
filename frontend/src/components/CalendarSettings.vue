@@ -3,11 +3,20 @@ import { ref, computed, onMounted } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { api } from '../api/client.js'
 import { useToasts } from '../stores/toasts.js'
+import { useSession } from '../stores/session.js'
 import { fullDate } from '../format.js'
 import { t } from '../i18n/index.js'
 
 /** Settings → Calendar: calendars and task lists, and linking a phone or computer over CalDAV. */
 const toasts = useToasts()
+const session = useSession()
+async function setBirthdays(on) {
+  try {
+    await session.updateSettings({ show_birthdays: on })
+  } catch (e) {
+    toasts.error(t('toast.failed', { msg: e.message }))
+  }
+}
 
 const calendars = ref([])
 const dav = ref(null)
@@ -170,6 +179,13 @@ const feedGuide = ref(false)
 
 <template>
   <div class="space-y-8">
+    <label class="flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-line">
+      <span>
+        {{ t('calsettings.birthdays') }}
+        <span class="block text-sm text-muted">{{ t('calsettings.birthdaysHint') }}</span>
+      </span>
+      <input type="checkbox" class="size-5 shrink-0 accent-accent" :checked="session.settings.show_birthdays !== false" @change="setBirthdays($event.target.checked)" />
+    </label>
     <section>
       <h2 class="mb-1 font-medium">{{ t('calsettings.calendarsTitle') }}</h2>
       <p class="mb-3 text-sm text-muted">{{ t('calsettings.calendarsIntro') }}</p>

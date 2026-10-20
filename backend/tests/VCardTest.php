@@ -36,3 +36,33 @@ test('write then parse gives the same contact back', function () {
     assertSame([$contact['email']], $back['emails']);
     assertSame(trim($contact['notes']), $back['notes']);
 });
+
+test('contact details survive a round trip through a vCard', function () {
+    $d = \Postvak\Contacts\ContactDetails::validate([
+        'given' => 'Marieke', 'family' => 'de Vries', 'nickname' => 'Mies', 'company' => 'PeopleDisplay', 'department' => 'Support', 'title' => 'Teamleider',
+        'emails' => [['value' => 'Marieke@Voorbeeld.nl', 'type' => 'work'], ['value' => 'mies@thuis.nl', 'type' => 'home']],
+        'phones' => [['value' => '06 1234 5678', 'type' => 'mobile'], ['value' => '013 123 4567', 'type' => 'work']],
+        'addresses' => [['street' => 'Stationsstraat 1', 'postal_code' => '5126 AB', 'city' => 'Gilze', 'region' => '', 'country' => 'Nederland', 'type' => 'home']],
+        'birthday' => '1980-05-17', 'websites' => [['value' => 'peopledisplay.nl']], 'groups' => ['Werk', 'werk', 'Band'],
+    ]);
+    assertSame('marieke@voorbeeld.nl', $d['emails'][0]['value']);
+    assertSame('https://peopledisplay.nl', $d['websites'][0]['value']);
+    assertSame(['Werk', 'Band'], $d['groups']);
+    $card = new \Sabre\VObject\Component\VCard(['VERSION' => '3.0', 'FN' => 'Marieke de Vries']);
+    \Postvak\Contacts\ContactDetails::toCard($card, $d);
+    $back = \Postvak\Contacts\ContactDetails::fromCard(\Sabre\VObject\Reader::read($card->serialize()));
+    assertSame($d, $back);
+});
+
+test('contact details: bad input is refused, a name alone is fine', function () {
+    $threw = false;
+    try {
+        \Postvak\Contacts\ContactDetails::validate(['emails' => [['value' => 'geen-adres']]]);
+    } catch (\Postvak\Http\HttpException) {
+        $threw = true;
+    }
+    assertTrue($threw);
+    $d = \Postvak\Contacts\ContactDetails::validate(['given' => 'Kees', 'birthday' => '--03-14', 'phones' => [['value' => '+31 6 98765432', 'type' => 'x']]]);
+    assertSame('other', $d['phones'][0]['type']);
+    assertSame('Kees', \Postvak\Contacts\ContactDetails::displayName($d));
+});

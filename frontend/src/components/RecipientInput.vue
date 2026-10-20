@@ -1,8 +1,9 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { api } from '../api/client.js'
+import { t } from '../i18n/index.js'
 
-// List of {email, name} as chips, with address autocomplete from /contacts.
+// List of {email, name} as chips, with address autocomplete from /contacts (contact groups add all members).
 const model = defineModel({ type: Array, default: () => [] })
 const props = defineProps({ label: String, autofocus: Boolean })
 
@@ -21,7 +22,7 @@ watch(text, (q) => {
   timer = setTimeout(async () => {
     try {
       const known = new Set(model.value.map((r) => r.email))
-      suggestions.value = (await api.get('/contacts', { q: q.trim() })).filter((c) => !known.has(c.email))
+      suggestions.value = (await api.get('/contacts', { q: q.trim() })).filter((c) => c.group || !known.has(c.email))
       highlighted.value = 0
     } catch {
       suggestions.value = []
@@ -30,7 +31,10 @@ watch(text, (q) => {
 })
 
 function add(entry) {
-  if (!model.value.some((r) => r.email === entry.email)) model.value = [...model.value, entry]
+  // A contact group: everyone in it who is not on the list yet.
+  const list = entry.group ? entry.members : [entry]
+  const known = new Set(model.value.map((r) => r.email))
+  model.value = [...model.value, ...list.filter((r) => !known.has(r.email))]
   text.value = ''
   suggestions.value = []
 }
@@ -83,7 +87,7 @@ defineExpose({ commitText })
       :title="r.email"
     >
       {{ r.name || r.email }}
-      <button type="button" class="rounded-full px-1 text-muted hover:text-ink" :aria-label="`${r.email} verwijderen`" @click="remove(r.email)">×</button>
+      <button type="button" class="rounded-full px-1 text-muted hover:text-ink" :aria-label="t('compose.removeRecipient', { email: r.email })" @click="remove(r.email)">×</button>
     </span>
     <input
       v-model="text"
@@ -96,15 +100,21 @@ defineExpose({ commitText })
       @blur="commitText"
     />
     <ul v-if="suggestions.length" class="absolute top-full left-12 z-10 mt-1 w-72 overflow-hidden rounded-xl bg-surface py-1 shadow-lg ring-1 ring-line">
-      <li v-for="(s, i) in suggestions" :key="s.email">
+      <li v-for="(s, i) in suggestions" :key="s.group ? 'g:' + s.group : s.email">
         <button
           type="button"
           class="block w-full px-3 py-2 text-left text-sm"
           :class="i === highlighted ? 'bg-accent-soft' : 'hover:bg-sunken'"
           @mousedown.prevent="add(s)"
         >
-          <span class="block truncate font-medium">{{ s.name || s.email }}</span>
-          <span v-if="s.name" class="block truncate text-muted">{{ s.email }}</span>
+          <template v-if="s.group">
+            <span class="block truncate font-medium">👥 {{ s.group }}</span>
+            <span class="block truncate text-muted">{{ t('compose.groupMembers', { n: s.members.length }) }}: {{ s.members.map((m) => m.name || m.email).join(', ') }}</span>
+          </template>
+          <template v-else>
+            <span class="block truncate font-medium">{{ s.name || s.email }}</span>
+            <span v-if="s.name" class="block truncate text-muted">{{ s.email }}</span>
+          </template>
         </button>
       </li>
     </ul>

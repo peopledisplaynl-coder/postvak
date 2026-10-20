@@ -1,5 +1,6 @@
 import { mockRequest } from './mock.js'
 import { t } from '../i18n/index.js'
+import { offlineEnabled, isCacheable, remember, recall, offlineNow, clearOffline } from './offline.js'
 
 const USE_MOCK = import.meta.env.VITE_MOCK === 'true'
 // Absolute path: a relative "api" would resolve to /mail/api/... on deeper pages.
@@ -30,7 +31,8 @@ export function setUnauthorizedHandler(fn) {
 export async function request(method, path, { body, form, raw, query, keepalive, signal } = {}) {
   if (USE_MOCK) return mockRequest(method, path, { body, query, form, raw })
 
-  const qs = query ? '?' + new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== null && v !== '')) : ''
+  const url = apiUrl(path, query)
+  const offline = offlineEnabled() && isCacheable(method, path)
   const headers = { Accept: 'application/json' }
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken
   if (body !== undefined) headers['Content-Type'] = 'application/json'
@@ -38,7 +40,7 @@ export async function request(method, path, { body, form, raw, query, keepalive,
 
   let res
   try {
-    res = await fetch(`${BASE}${path}${qs}`, {
+    res = await fetch(url, {
       method,
       headers,
       body: raw ?? form ?? (body !== undefined ? JSON.stringify(body) : undefined),
@@ -48,8 +50,15 @@ export async function request(method, path, { body, form, raw, query, keepalive,
     })
   } catch (e) {
     if (e?.name === 'AbortError') throw e
+    // Offline reading: the last saved copy.
+    const saved = offline ? await recall(url) : null
+    if (saved !== null) {
+      offlineNow.value = true
+      return JSON.parse(saved)
+    }
     throw new ApiError(0, 'offline')
   }
+  offlineNow.value = false
 
   if (res.status === 204) return null
   const text = await res.text()
@@ -62,10 +71,20 @@ export async function request(method, path, { body, form, raw, query, keepalive,
     throw new ApiError(res.status, t('errors.invalidResponse', { status: res.status }))
   }
   if (!res.ok) {
-    if (res.status === 401 && path !== '/auth/login') onUnauthorized()
+    if (res.status === 401 && path !== '/auth/login') {
+      clearOffline()
+      onUnauthorized()
+    }
     throw new ApiError(res.status, data?.error || res.statusText)
   }
+  if (offline) remember(url, text)
   return data
+}
+
+/** The full URL of an API call (also the key of its offline copy). */
+export function apiUrl(path, query) {
+  const qs = query ? '?' + new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== null && v !== '')) : ''
+  return `${BASE}${path}${qs}`
 }
 
 export const api = {

@@ -186,6 +186,19 @@ users, linked accounts, preferences and contacts.
   signature. Links work for 30 days; the cron job removes expired and unfinished uploads. At most 10 GB of
   active files per user.
 
+## Message actions and contacts
+
+- `frontend/src/messageActions.js` builds the actions for one or more messages (reply, archive, delete, spam,
+  read, star, snooze, move, labels, task, rule, more from sender). `ActionMenu.vue` shows them as the right-click
+  menu of the list (on the selection when the row is part of it) and as the ⋮ menu of the reader on screens below
+  `md`, where the bar keeps only archive, delete and unread with larger touch targets.
+- Contacts have full details (`Contacts\ContactDetails`, JSON in `contacts.details`): given/family name,
+  nickname, company, department, title, e-mails and phones with a type, addresses, birthday (`YYYY-MM-DD` or
+  `--MM-DD`), websites and groups (vCard CATEGORIES). The simple columns (`name`, `email`, `extra_emails`, `phone`)
+  follow from them for search, autocomplete and sync. Rows from before migration 014 get their details from the
+  stored card or the simple columns when read. `ContactCards::apply` writes the details (and a photo set in
+  Postvak) into the vCard phones get; a card from a phone fills `details` again and its photo stays in `vcard`.
+
 ## Rules, out-of-office replies, templates
 
 - Shared hosting offers no delivery hooks and often no ManageSieve, so rules and out-of-office replies run in
@@ -213,6 +226,34 @@ users, linked accounts, preferences and contacts.
   their name (`card_uri`).
 - Deleting a card on a phone keeps an address you send to as a collected one (for autocomplete).
 
+## Mail insights, follow-ups and offline reading (1.8)
+
+- `Mail\MessageInsights` reads a message's headers for the reader: how to unsubscribe (`List-Unsubscribe`,
+  RFC 2369/8058: one-click POST through `Http\Fetcher`, otherwise a mail to the `mailto:` address, otherwise the
+  https page is opened), whether the sender is genuine (the topmost `Authentication-Results`, added by our own
+  server: DMARC fail → danger, SPF fail/softfail without DKIM → caution; plus a display name that shows another
+  address and a Reply-To on another domain) and the inbox tab (social domains, mailing lists/bulk = promotions,
+  no-reply/notification senders and `Auto-Submitted` = updates, the rest primary). `searchCriteria()` finds the
+  same groups on the IMAP server, so the tabs page and count like any folder (setting `inbox_tabs`).
+- **Mute** (`Mail\MutedThreads`): the Message-IDs of the conversation go into `muted_threads`; `MailProcessor`
+  marks a new reply that refers to one of them as read and archives it (and remembers its id too).
+- **Block sender** is a rule (`from is <address>` → trash) made from the reader, with undo.
+- **Follow-up** (`Mail\FollowUps`): sending with `followup_days` stores the Message-ID in `followups`. The cron job
+  (after snoozes) checks INBOX and the archive for a reply (`In-Reply-To`/`References`); without one, the copy from
+  Sent is appended to INBOX unread, starred and with keyword `$followup` (summary field `followup`), which shows a
+  "follow up" banner in the reader.
+- **Quota**: `GETQUOTAROOT INBOX` (RFC 2087); shown in the sidebar when the server reports it.
+- **Attachments overview**: `UID FETCH (BODYSTRUCTURE)` on the messages with attachments, parsed by
+  `Mail\BodyStructure` (the library's parser breaks on quoted strings next to parentheses). Nothing is downloaded.
+- **Signatures**: `accounts.signatures` holds `{list: [{id, name, html}], new, reply}`; `signature_html` stays the
+  default for new messages (older clients). The composer swaps the signature block when another one is chosen.
+- **Birthdays** in the calendar are computed in the browser from saved contacts (`details.birthday`); they are not
+  stored in a calendar, so phones do not get them twice over CalDAV.
+- **Offline reading** (opt-in per device, `api/offline.js`): successful GETs of lists, messages, folders, the
+  calendar and contacts are kept in Cache Storage (`pv-offline-v1`) and returned when the network is gone; the
+  first 20 messages of a list are fetched in the background. The app shell comes from the service worker precache.
+  The cache is wiped on logout and on a 401.
+
 ## API
 
 All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` because they can contain
@@ -229,15 +270,20 @@ All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` b
 | PATCH / DELETE | `/accounts/{id}` | Edit (name, colour, signature, folders, server, password) / remove |
 | GET | `/accounts/{id}/folders` | Folders with unseen/total counts and detected role |
 | POST / PATCH / DELETE | `/accounts/{id}/folders` | Create `{name, parent?}`, rename `{path, name}`, delete `?path=` (not INBOX or special folders) |
-| GET | `/accounts/{id}/messages?folder=&page=&per_page=&q=&sort=` | Message summaries incl. `snippet` (preview line, cached in `message_snippets`); `sort` = `date_desc` (default), `date_asc`, `from`, `subject`, `size_desc`. `threads=1` (with `date_desc`): one row per conversation via `UID THREAD REFS` (or `REFERENCES`); the row is the newest message plus `thread: {count, uids, unseen, flagged, participants}`. Response has `threaded: false` when the server cannot thread. Dates are UTC. Sorted by the server (IMAP SORT), searched in from/to/subject (`body=1`: also the message text); filters `filter=unseen,flagged,attachment`, `since=<days>`, `from=<address>`; `per_page` 5–100 |
+| GET | `/accounts/{id}/messages?folder=&page=&per_page=&q=&sort=` | Message summaries incl. `snippet` (preview line, cached in `message_snippets`); `sort` = `date_desc` (default), `date_asc`, `from`, `subject`, `size_desc`. `threads=1` (with `date_desc`): one row per conversation via `UID THREAD REFS` (or `REFERENCES`); the row is the newest message plus `thread: {count, uids, unseen, flagged, participants}`. Response has `threaded: false` when the server cannot thread. Dates are UTC. Sorted by the server (IMAP SORT), searched in from/to/subject (`body=1`: also the message text); filters `filter=unseen,flagged,attachment`, `since=<days>`, `from=<address>`, `category=primary|promotions|social|updates` (inbox tabs); `per_page` 5–100. Summaries carry `category` and `followup` |
 | GET | `/accounts/{id}/messages/{uid}?folder=&images=1` | Full message, sanitised |
 | GET | `/accounts/{id}/messages/{uid}/conversation?folder=` | The conversation `uid` belongs to, oldest first: messages in this folder (IMAP `THREAD`) plus own replies found in Sent (by `In-Reply-To`/`References`) |
 | GET | `/accounts/{id}/messages/{uid}/attachments/{index}?folder=` | Download |
+| GET | `/accounts/{id}/messages/{uid}/source?folder=&download=` | The original message (text/plain), or as `.eml` with `download=1` |
+| POST | `/accounts/{id}/messages/{uid}/unsubscribe` | `{folder}`: one-click or mailto unsubscribe → `{done, method, url?}` (`done:false` with a `url` to open) |
+| POST | `/accounts/{id}/messages/{uid}/mute` | `{folder, muted}`: ignore the conversation (or stop) |
+| GET | `/accounts/{id}/quota` | `{used, limit}` in bytes, or null |
+| GET | `/accounts/{id}/attachments?folder=&page=&q=` | Messages with attachments, newest first, with `attachments: [{name, mime, size}]` (25 per page) |
 | POST | `/accounts/{id}/folders/read` | `{path}`: mark everything in the folder as read |
 | POST | `/accounts/{id}/folders/empty` | `{path}`: permanently delete everything in the trash or spam folder (other folders are refused) |
 | POST | `/accounts/{id}/move` | `{folder, uids, target: archive\|trash\|junk\|inbox\|<path>}` (`junk` = mark as spam, `inbox` from spam = not spam), one `UID MOVE` for all uids |
 | POST | `/accounts/{id}/flags` | `{folder, uids, seen?, flagged?, answered?}` |
-| POST | `/accounts/{id}/send` | multipart: `payload` (JSON, incl. `draft_uid?`, `include_attachments?: {folder, uid, indexes}`) + `files[]`; deletes the draft after sending |
+| POST | `/accounts/{id}/send` | multipart: `payload` (JSON, incl. `draft_uid?`, `include_attachments?: {folder, uid, indexes}`) + `files[]`; deletes the draft after sending; `followup_days` (1–30) asks for a reminder when nobody answers |
 | POST | `/accounts/{id}/drafts` | multipart like `send` (recipients optional), `draft_uid?` = previous version: APPENDs the draft to the Drafts folder and removes the old copy; returns `{uid, folder, saved_at, attachments}` |
 | DELETE | `/accounts/{id}/drafts/{uid}` | Discard a draft permanently |
 | GET | `/unified/messages?page=&per_page=&q=&sort=&threads=` | Inboxes of all accounts merged; each summary carries `account_id`; failing accounts listed in `errors` |
@@ -260,9 +306,10 @@ All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` b
 | POST | `/admin/users/{id}/reset-2fa` | Admin: switch 2FA off for a user |
 | GET | `/contacts?q=` | Address autocomplete (favourites and saved contacts first) |
 | GET | `/contacts/list?q=&saved=1` | Contacts page; without `saved=1` also the addresses collected automatically when sending |
-| POST | `/contacts` | `{email, name?, phone?, notes?, favorite?}`; an automatically collected address becomes a saved contact, a saved one gives 409 |
+| POST | `/contacts` | `{details, notes?, favorite?}` (full form, see below) or the old `{email, name?, phone?, notes?, favorite?}`; an automatically collected address becomes a saved contact, a saved one gives 409 |
 | PATCH / DELETE | `/contacts/{id}` | Edit (same fields) / remove |
-| POST | `/contacts/import` | multipart `file` (.vcf, vCard 2.1/3.0/4.0, max 5 MB): one contact per e-mail address; existing data is never overwritten. Returns `{cards, added, updated, skipped}` |
+| GET / POST / DELETE | `/contacts/{id}/photo` | The photo (Postvak's own, else the one in the phone's card) / set it (multipart `file`, JPEG/PNG/WebP, max 1 MB; the browser makes it 256 px square) / remove it |
+| POST | `/contacts/import` | multipart `file` (.vcf, vCard 2.1/3.0/4.0, max 5 MB): one contact per card (first address; the others as extra addresses), with the full details; existing data is never overwritten. Returns `{cards, added, updated, skipped}` |
 | GET | `/contacts/export?all=1` | vCard 3.0 download of the saved contacts (`all=1`: also the collected ones) |
 | GET / POST | `/trusted-senders` | Safe senders: `{kind: email\|domain, value}`; remote images always shown |
 | DELETE | `/trusted-senders/{id}` | Remove a safe sender |

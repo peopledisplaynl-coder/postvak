@@ -40,7 +40,8 @@ final class MailProcessor
         $accounts = Database::all(
             'SELECT a.* FROM accounts a
              WHERE EXISTS (SELECT 1 FROM mail_rules r WHERE r.user_id = a.user_id AND r.enabled = 1 AND (r.account_id IS NULL OR r.account_id = a.id))
-                OR EXISTS (SELECT 1 FROM autoreplies x WHERE x.account_id = a.id AND x.enabled = 1)'
+                OR EXISTS (SELECT 1 FROM autoreplies x WHERE x.account_id = a.id AND x.enabled = 1)
+                OR EXISTS (SELECT 1 FROM muted_threads m WHERE m.account_id = a.id)'
         );
         $rulesByUser = [];
         foreach ($accounts as $account) {
@@ -50,7 +51,8 @@ final class MailProcessor
                 static fn ($r) => $r['enabled'] && ($r['account_id'] === null || $r['account_id'] === (int) $account['id'])
             ));
             $replyOn = AutoReply::active($reply);
-            if ($rules === [] && !$replyOn) {
+            $hasMuted = Database::one('SELECT id FROM muted_threads WHERE account_id = ? LIMIT 1', [$account['id']]) !== null;
+            if ($rules === [] && !$replyOn && !$hasMuted) {
                 continue; // a reply set for later: nothing to do yet (and no starting point, so old mail is skipped)
             }
             $stats['accounts']++;
@@ -74,6 +76,9 @@ final class MailProcessor
                 }
                 $stats['messages'] += count($messages);
                 $plan = RuleEngine::plan($rules, $messages);
+                if ($hasMuted) {
+                    $plan = $this->addMuted($imap, (int) $account['id'], $messages, $plan);
+                }
                 $this->execute($imap, $plan);
                 $stats['matched'] += count($plan);
 
@@ -134,6 +139,27 @@ final class MailProcessor
             }
         }
         return $result;
+    }
+
+    /** Replies in muted conversations: read and archived (unless a rule already moves or deletes them). */
+    private function addMuted(ImapService $imap, int $accountId, array $messages, array $plan): array
+    {
+        $muted = new MutedThreads();
+        $archive = null;
+        foreach ($messages as $msg) {
+            if (!$muted->isMuted($accountId, (string) ($msg['raw'] ?? ''))) {
+                continue;
+            }
+            $muted->extend($accountId, (string) $msg['raw']);
+            $archive ??= $imap->roleFolder('archive');
+            $p = $plan[$msg['uid']] ?? ['read' => false, 'flag' => false, 'labels' => [], 'move' => null, 'trash' => false, 'rules' => []];
+            $p['read'] = true;
+            if (!$p['move'] && !$p['trash']) {
+                $p['move'] = $archive;
+            }
+            $plan[$msg['uid']] = $p;
+        }
+        return $plan;
     }
 
     /** Carry out a plan: flags first (while the messages are still in the inbox), then the moves. */

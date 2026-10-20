@@ -133,7 +133,9 @@ onMounted(async () => {
   // Text typed in the quick reply box: one paragraph per line.
   const typed = (props.draft.text ?? '').trim()
   const start = typed ? typed.split(/\n/).map((line) => `<p>${escape(line) || '<br>'}</p>`).join('') : '<p></p>'
-  const signature = from.value?.signature_html
+  // The account's signature for new mail, or the one for replies and forwards.
+  sigId.value = defaultSignatureId(from.value, mode)
+  const signature = signatureHtml(from.value, sigId.value)
   body = signature ? `${start}<p></p><p>--</p>${DOMPurify.sanitize(signature)}` : start
 
   editor.value.setContent(body)
@@ -218,6 +220,30 @@ onBeforeUnmount(() => appState.composing--)
 
 // ---- templates (reusable texts)
 const templates = ref(null)
+// ---- signatures: several per account; one for new mail, one for replies; switch in the ⋯ menu
+const sigId = ref(null)
+const sigOpen = ref(false)
+const signatures = computed(() => from.value?.signatures?.list ?? [])
+function defaultSignatureId(account, mode) {
+  const s = account?.signatures
+  if (!s) return null
+  return (mode === 'new' ? s.new : s.reply) ?? null
+}
+function signatureHtml(account, id) {
+  return (account?.signatures?.list ?? []).find((x) => x.id === id)?.html ?? ''
+}
+function chooseSignature(id) {
+  sigOpen.value = false
+  sigId.value = id
+  const html = signatureHtml(from.value, id)
+  editor.value?.replaceSignature(html ? `<p>--</p>${DOMPurify.sanitize(html)}` : '')
+}
+// Another sender: that account's signature.
+watch(fromId, () => {
+  if (!ready) return
+  chooseSignature(defaultSignatureId(from.value, props.draft.mode === 'new' ? 'new' : 'reply'))
+})
+
 const templatesOpen = ref(false)
 
 async function toggleTemplates() {
@@ -297,6 +323,7 @@ function buildPayload() {
     html: bodyHtml(),
     in_reply_to: inReplyTo.value || undefined,
     references: references.value || undefined,
+    followup_days: followupDays.value || undefined,
   }
   if (replyRef.value) {
     payload.reply_folder = replyRef.value.folder
@@ -513,6 +540,7 @@ async function send() {
 
 // ---- send later
 const laterOpen = ref(false)   // small menu next to the send button
+const followupDays = ref(0)     // "remind me if nobody answers within … days" (0 = no)
 const pickingTime = ref(false)
 
 async function scheduleSend(date) {
@@ -601,6 +629,20 @@ async function discard() {
         <button type="button" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-danger" :title="t('compose.discard')" @click="discard">
           <AppIcon name="trash" />
         </button>
+        <div v-if="signatures.length > 1" class="relative">
+          <button type="button" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('signatures.choose')" :aria-expanded="sigOpen" @click="sigOpen = !sigOpen">
+            <AppIcon name="drafts" />
+          </button>
+          <div v-if="sigOpen" class="fixed inset-0 z-20" @click="sigOpen = false" />
+          <div v-if="sigOpen" class="absolute right-0 z-30 mt-1 w-60 overflow-hidden rounded-xl bg-surface py-1 text-sm shadow-lg ring-1 ring-line" role="menu">
+            <p class="px-3 pt-1 pb-1.5 text-xs font-medium text-muted">{{ t('signatures.choose') }}</p>
+            <button
+              v-for="(sig, i) in [...signatures, { id: null, name: t('signatures.none') }]" :key="sig.id ?? 'none'" type="button" role="menuitemradio" :aria-checked="sigId === sig.id"
+              class="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-sunken" :class="sigId === sig.id ? 'font-medium text-accent' : ''"
+              @click="chooseSignature(sig.id)"
+            >{{ sig.name || t('signatures.numbered', { n: i + 1 }) }}<span v-if="sigId === sig.id">✓</span></button>
+          </div>
+        </div>
         <div class="relative">
           <button type="button" class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('templates.title')" :aria-expanded="templatesOpen" @click="toggleTemplates">
             <AppIcon name="template" />
@@ -643,10 +685,17 @@ async function discard() {
             <AppIcon name="chevron" :size="15" class="rotate-90" />
           </button>
           <div v-if="laterOpen" class="fixed inset-0 z-20" @click="laterOpen = false" />
-          <div v-if="laterOpen" class="absolute top-full right-0 z-30 mt-1 w-52 overflow-hidden rounded-xl bg-surface py-1 shadow-lg ring-1 ring-line">
+          <div v-if="laterOpen" class="absolute top-full right-0 z-30 mt-1 w-64 overflow-hidden rounded-xl bg-surface py-1 shadow-lg ring-1 ring-line">
             <button type="button" class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-sunken" @click="laterOpen = false; pickingTime = true">
               <AppIcon name="scheduled" :size="18" class="text-muted" /> {{ t('later.sendLater') }}
             </button>
+            <div class="border-t border-line px-4 pt-2.5 pb-1 text-xs font-medium text-muted">{{ t('followup.menu') }}</div>
+            <button
+              v-for="d in [0, 1, 3, 7]" :key="d" type="button" role="menuitemradio" :aria-checked="followupDays === d"
+              class="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-sunken"
+              :class="followupDays === d ? 'font-medium text-accent' : ''"
+              @click="followupDays = d; laterOpen = false"
+            >{{ d ? t('followup.after', { n: d }) : t('followup.none') }}<span v-if="followupDays === d">✓</span></button>
           </div>
         </div>
       </header>
@@ -709,6 +758,11 @@ async function discard() {
         </template>
       </div>
 
+      <div v-if="followupDays" class="flex items-center gap-2 border-t border-line px-4 py-2 text-sm text-accent">
+        <AppIcon name="clock" :size="15" />
+        <span class="min-w-0 flex-1">{{ t('followup.chip', { n: followupDays }) }}</span>
+        <button type="button" class="text-muted hover:text-ink" :aria-label="t('followup.none')" @click="followupDays = 0">×</button>
+      </div>
       <ul v-if="files.length || serverAttachments.length || bigUploads.length" class="flex flex-wrap gap-2 border-t border-line px-4 py-2">
         <li
           v-for="u in bigUploads" :key="'b' + u.id"

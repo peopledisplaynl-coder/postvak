@@ -4,6 +4,9 @@ import AppIcon from './AppIcon.vue'
 import MessageRow from './MessageRow.vue'
 import FolderPicker from './FolderPicker.vue'
 import LabelMenu from './LabelMenu.vue'
+import ActionMenu from './ActionMenu.vue'
+import { useRouter } from 'vue-router'
+import { messageActions } from '../messageActions.js'
 import { useSession } from '../stores/session.js'
 import { labelName, labelMap } from '../labels.js'
 import { useMail, msgKey } from '../stores/mail.js'
@@ -13,7 +16,7 @@ import { t } from '../i18n/index.js'
 const props = defineProps({ title: { type: String, default: '' } })
 const session = useSession()
 const activeLabel = computed(() => (mail.labelFilter ? labelMap(session.settings)[mail.labelFilter.toLowerCase()] : null))
-const emit = defineEmits(['open', 'menu', 'shortcuts'])
+const emit = defineEmits(['open', 'menu', 'shortcuts', 'reply'])
 
 const mail = useMail()
 const scroller = ref(null)
@@ -59,6 +62,10 @@ defineExpose({ openSearch })
 // "More from this sender" (from the reader) opens the search with the sender filter.
 watch(() => mail.filters.from, (from) => { if (from) searching.value = true }, { immediate: true })
 const periods = [7, 30, 365]
+const INBOX_TABS = [
+  { key: 'primary', icon: 'inbox' }, { key: 'promotions', icon: 'tag' },
+  { key: 'social', icon: 'contacts' }, { key: 'updates', icon: 'bell' },
+]
 const periodOpen = ref(false)
 function choosePeriod(days) {
   periodOpen.value = false
@@ -105,9 +112,37 @@ function startMove() {
   picking.value = true
 }
 const allSeen = computed(() => mail.selectedMessages.every((m) => m.seen))
+// Messages the folder picker moves: the selection, or the row of the right-click menu.
+const pickTargets = ref(null)
 function moveSelected({ path, label }) {
   picking.value = false
-  mail.moveTo(mail.selectedMessages, path, label)
+  mail.moveTo(pickTargets.value ?? mail.selectedMessages, path, label)
+  pickTargets.value = null
+}
+
+// ---- right-click menu: acts on the selection if the row is part of it, otherwise on that row
+const router = useRouter()
+const context = ref(null)
+function openContext({ message, x, y }) {
+  const key = msgKey(message)
+  const messages = mail.selecting && mail.selected.includes(key) ? mail.selectedMessages : [message]
+  const items = messageActions({
+    messages,
+    router,
+    onOpen: () => emit('open', message),
+    onReply: (mode) => emit('reply', { mode, message }),
+    onMove: () => {
+      const accounts = new Set(messages.map((m) => m.account_id))
+      if (accounts.size > 1) {
+        useToasts().error(t('list.moveOneAccount'))
+        return
+      }
+      pickTargets.value = messages
+      pickAccount.value = [...accounts][0]
+      picking.value = true
+    },
+  })
+  context.value = { items, x, y }
 }
 function onKey(e) {
   if (e.key === 'Escape' && mail.selecting && !picking.value) mail.clearSelection()
@@ -257,6 +292,18 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
         >{{ t('list.searchBody') }}</button>
       </template>
     </header>
+    <!-- Inbox tabs, like Gmail (setting "Inbox tabs") -->
+    <div v-if="mail.tabsActive && !searching" class="flex border-b border-line" role="tablist" :aria-label="t('tabs.label')">
+      <button
+        v-for="tab in INBOX_TABS" :key="tab.key" role="tab" :aria-selected="mail.category === tab.key"
+        class="flex min-w-0 flex-1 items-center justify-center gap-1.5 border-b-2 px-2 py-2.5 text-sm transition"
+        :class="mail.category === tab.key ? 'border-accent font-medium text-accent' : 'border-transparent text-muted hover:bg-sunken hover:text-ink'"
+        @click="mail.setCategory(tab.key)"
+      >
+        <AppIcon :name="tab.icon" :size="16" class="shrink-0" /><span class="truncate">{{ t(`tabs.${tab.key}`) }}</span>
+      </button>
+    </div>
+
     <!-- Search filters -->
     <div v-if="searching" class="flex flex-wrap items-center gap-1.5 border-b border-line px-3 py-2" role="group" :aria-label="t('filters.label')">
       <button
@@ -346,6 +393,7 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
           :message="m"
           :active="msgKey(m) === mail.openKey"
           @open="emit('open', $event)"
+          @context="openContext"
         />
       </ul>
 
@@ -358,6 +406,7 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
       </div>
     </div>
 
-    <FolderPicker v-if="picking" :account-id="pickAccount" :exclude="mail.folderPath" :count="mail.selected.length" @close="picking = false" @pick="moveSelected" />
+    <FolderPicker v-if="picking" :account-id="pickAccount" :exclude="mail.folderPath" :count="(pickTargets ?? mail.selectedMessages).length" @close="picking = false; pickTargets = null" @pick="moveSelected" />
+    <ActionMenu v-if="context" :items="context.items" :x="context.x" :y="context.y" @close="context = null" />
   </section>
 </template>

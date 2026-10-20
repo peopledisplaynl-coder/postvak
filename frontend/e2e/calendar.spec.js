@@ -87,3 +87,12 @@ test('events from a calendar from elsewhere are read-only', async ({ page }) => 
   await expect(page.getByText(/kan hier niet gewijzigd worden/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Opslaan' })).toHaveCount(0)
 })
+
+test('calendar: birthdays of contacts', async ({ page }) => {
+  await login(page)
+  await page.goto('/calendar')
+  await page.getByRole('tab', { name: 'Lijst' }).click()
+  await expect(page.getByText(/Marieke de Vries wordt \d+/)).toBeVisible()
+  await page.getByRole('button', { name: 'Verjaardagen' }).click()
+  await expect(page.getByText(/Marieke de Vries wordt/)).toHaveCount(0)
+})

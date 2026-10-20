@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { api, setCsrf } from '../api/client.js'
+import { clearOffline } from '../api/offline.js'
 import { setLanguage } from '../i18n/index.js'
 
 export const useSession = defineStore('session', {
@@ -57,6 +58,7 @@ export const useSession = defineStore('session', {
         this.$reset()
         this.ready = true
         setCsrf(null)
+        clearOffline()
       }
     },
 

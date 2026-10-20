@@ -21,20 +21,25 @@ const L = {
     dir: 'handleiding', locale: 'nl-NL', email: 'ton@example.nl', quickReply: 'Snel antwoorden', reply: 'Klinkt goed, ik ben er om 10 uur!',
     search: 'Zoeken in mail', unread: 'Ongelezen', clear: 'Wissen', back: 'Terug', compose: 'Nieuw bericht', subject: 'Onderwerp',
     to: 'marieke@voorbeeld.nl', subj: 'Zaterdag', body: 'Hoi Marieke,\n\nZullen we om tien uur afspreken bij de markt? ', bold: 'Neem de lijst mee!',
-    file: 'Vakantiefilm.mp4', asLink: 'downloadlink', close: 'Sluiten', menu: 'Instellingen',
+    file: 'Vakantiefilm.mp4', asLink: 'downloadlink', close: 'Sluiten', menu: 'Instellingen', more: 'Meer acties', edit: 'Bewerken', contact: 'Marieke de Vries',
+    tabs: /Inboxtabbladen/, shop: /Webwinkel/, images: 'Afbeeldingen', month: 'Maand',
     names: {},
   },
   en: {
     dir: 'user-guide', locale: 'en-GB', email: 'demo@example.com', quickReply: 'Quick reply', reply: 'Sounds good, see you at ten!',
     search: 'Search mail', unread: 'Unread', clear: 'Clear', back: 'Back', compose: 'New message', subject: 'Subject',
     to: 'maria@example.org', subj: 'Saturday', body: 'Hi Maria,\n\nShall we meet at ten at the market? ', bold: 'Bring the list!',
-    file: 'Holiday video.mp4', asLink: 'download link', close: 'Close', menu: 'Settings',
+    file: 'Holiday video.mp4', asLink: 'download link', close: 'Close', menu: 'Settings', more: 'More actions', edit: 'Edit', contact: 'Maria Lopez',
+    tabs: /Inbox tabs/, shop: /Web Shop/, images: 'Images', month: 'Month',
     names: {
       inloggen: 'login', overzicht: 'overview', 'snel-antwoorden': 'quick-reply', labels: 'labels', zoeken: 'search', schrijven: 'compose',
       'grote-bijlage': 'large-file', 'instellingen-algemeen': 'settings-general', 'instellingen-weergave': 'settings-appearance',
       'instellingen-regels': 'settings-rules', 'instellingen-agenda': 'settings-calendar', 'instellingen-privacy': 'settings-privacy',
       'instellingen-accounts': 'settings-accounts', 'over-postvak': 'about', agenda: 'calendar', taken: 'tasks', contacten: 'contacts',
       'telefoon-lijst': 'phone-list', 'telefoon-menu': 'phone-menu', 'telefoon-bericht': 'phone-message',
+      rechtermuisknop: 'right-click', 'contact-bewerken': 'contact-edit', 'telefoon-menu-bericht': 'phone-message-menu',
+      'inbox-tabbladen': 'inbox-tabs', waarschuwing: 'warning', opvolgen: 'follow-up', uitschrijven: 'unsubscribe',
+      bijlagen: 'attachments', verjaardagen: 'birthdays',
     },
   },
 }
@@ -119,6 +124,12 @@ for (const lang of langs) {
       await page.getByRole('button', { name: T.clear, exact: true }).click()
       await page.locator(`header button[aria-label="${T.back}"]`).first().click()
     })
+    await shot('rechtermuisknop', async () => {
+      await rows(page).nth(2).locator('[role=button]').click({ button: 'right' })
+      await page.waitForTimeout(400)
+      await page.screenshot({ path: out('rechtermuisknop'), clip: { x: 256, y: 120, width: 560, height: 680 } })
+      await page.keyboard.press('Escape')
+    })
     await shot('schrijven', async () => {
       await page.getByRole('button', { name: T.compose }).first().click()
       await page.locator('.ProseMirror').waitFor()
@@ -170,7 +181,56 @@ for (const lang of langs) {
     await shot('contacten', async () => {
       await go(page, '/contacts')
       await page.waitForTimeout(800)
+      await page.getByRole('button', { name: new RegExp(T.contact) }).last().click()
+      await page.waitForTimeout(600)
       await page.screenshot({ path: out('contacten') })
+    })
+    await shot('contact-bewerken', async () => {
+      await page.getByRole('button', { name: T.edit }).last().click()
+      await page.waitForTimeout(600)
+      await page.screenshot({ path: out('contact-bewerken'), clip: { x: 400, y: 0, width: 880, height: 800 } })
+    })
+    await context.close()
+  }
+
+  // ---- computer: features of 1.8
+  {
+    const { context, page } = await session(desktop)
+    const right = { x: 640, y: 0, width: 640, height: 400 }
+    await shot('waarschuwing', async () => {
+      await go(page, '/mail/1?folder=INBOX&uid=993&acc=1')
+      await page.locator('article [role=alert]').first().waitFor()
+      await page.mouse.move(5, 5)
+      await page.screenshot({ path: out('waarschuwing'), clip: right })
+    })
+    await shot('opvolgen', async () => {
+      await go(page, '/mail/1?folder=INBOX&uid=995&acc=1')
+      await page.locator('article h2').first().waitFor()
+      await page.screenshot({ path: out('opvolgen'), clip: right })
+    })
+    await shot('uitschrijven', async () => {
+      await go(page, '/mail/1?folder=INBOX')
+      await rows(page).filter({ hasText: T.shop }).first().locator('[role=button]').click()
+      await page.locator('article h2').first().waitFor()
+      await page.waitForTimeout(400)
+      await page.screenshot({ path: out('uitschrijven'), clip: right })
+    })
+    await shot('inbox-tabbladen', async () => {
+      await go(page, '/settings/general')
+      await page.getByRole('checkbox', { name: T.tabs }).check()
+      await go(page, '/mail/1?folder=INBOX')
+      await page.screenshot({ path: out('inbox-tabbladen'), clip: { x: 0, y: 0, width: 680, height: 420 } })
+    })
+    await shot('bijlagen', async () => {
+      await go(page, '/attachments')
+      await page.waitForTimeout(500)
+      await page.screenshot({ path: out('bijlagen') })
+    })
+    await shot('verjaardagen', async () => {
+      await go(page, '/calendar')
+      await page.getByRole('tab', { name: T.month, exact: true }).click()
+      await page.waitForTimeout(700)
+      await page.screenshot({ path: out('verjaardagen') })
     })
     await context.close()
   }
@@ -193,6 +253,12 @@ for (const lang of langs) {
       await page.locator('article h2').first().waitFor()
       await page.waitForTimeout(700)
       await page.screenshot({ path: out('telefoon-bericht') })
+    })
+    await shot('telefoon-menu-bericht', async () => {
+      await page.getByRole('button', { name: T.more }).click()
+      await page.waitForTimeout(400)
+      await page.screenshot({ path: out('telefoon-menu-bericht') })
+      await page.keyboard.press('Escape')
     })
     await context.close()
   }

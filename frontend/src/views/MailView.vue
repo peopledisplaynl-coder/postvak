@@ -54,8 +54,15 @@ watch([accountId, folder], ([a, f]) => {
 watch(target, (tg) => (mail.openKey = tg ? msgKey(tg) : null), { immediate: true })
 // The open message left the list (deleted, archived or moved from the list, by swiping, dragging or for several
 // at once): close the reader too, just like the buttons in the message itself do.
+// With the setting "after deleting: next/previous message", that message opens instead.
 watch(() => mail.openKey, (key) => {
-  if (key === null && target.value) closeMessage()
+  if (key !== null || !target.value) return
+  const mode = session.settings.after_delete ?? 'list'
+  const nextKey = mode !== 'list' ? mail.advance?.[mode] : null
+  mail.advance = null
+  const next = nextKey ? mail.byKey(nextKey) : null
+  if (next) openMessage(next)
+  else closeMessage()
 })
 
 function navigate(target) {
@@ -71,6 +78,15 @@ function openMessage(m) {
     return
   }
   router.push({ query: { ...route.query, uid: m.uid, acc: m.account_id } })
+}
+
+/** Reply / reply all / forward from the right-click menu of the list (the full message is fetched first). */
+async function replyFromList({ mode, message }) {
+  try {
+    compose(mode, await mail.fetchMessage(message))
+  } catch (e) {
+    useToasts().error(t('toast.failed', { msg: e.message }))
+  }
 }
 
 function closeMessage() {
@@ -159,15 +175,15 @@ function onKey(e) {
     case 'k': if (i > 0) openMessage(list[i - 1]); break
     case 'e':
       if (mail.selecting) mail.bulk('archive')
-      else if (current) mail.act('archive', current).then((ok) => ok && closeMessage())
+      else if (current) mail.act('archive', current)
       break
     case '#': case 'Delete':
       if (mail.selecting) mail.bulk('trash')
-      else if (current) mail.act('trash', current).then((ok) => ok && closeMessage())
+      else if (current) mail.act('trash', current)
       break
     case '!':
       if (mail.selecting) mail.bulk('junk')
-      else if (current) mail.act('junk', current).then((ok) => ok && closeMessage())
+      else if (current) mail.act('junk', current)
       break
     case 'b':
       if (mail.selecting) mail.bulk('snooze')
@@ -256,7 +272,7 @@ const layoutStyle = computed(() => ({
       class="relative min-w-0 flex-1 border-line md:flex-none md:border-r"
       :class="[uid ? 'hidden md:block' : 'block', columns.list.value ? 'md:w-(--pv-list-w)' : 'md:w-[360px] xl:w-[420px]']"
     >
-      <MessageList ref="listRef" :title="title" @open="openMessage" @menu="drawer = true" @shortcuts="showShortcuts = true" />
+      <MessageList ref="listRef" :title="title" @open="openMessage" @menu="drawer = true" @shortcuts="showShortcuts = true" @reply="replyFromList" />
       <ColumnResizer class="hidden md:block" :width="listWidth" :min="280" :max="listMax" :label="t('layout.resizeList')" @update:width="(w) => (columns.list.value = w)" @reset="columns.list.value = null" />
     </div>
 

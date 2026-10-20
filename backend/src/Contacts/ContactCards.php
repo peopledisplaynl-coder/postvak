@@ -11,8 +11,8 @@ use Throwable;
  * The bridge between Postvak's contacts (one row per address, simple fields) and the vCards that phones
  * sync over CardDAV. Only saved contacts are cards; addresses collected while sending are not.
  *
- * A card a phone sent is kept whole in `vcard`, so photos, birthdays, extra numbers and addresses survive;
- * edits in Postvak change only the name, the first e-mail address, the first phone number and the note.
+ * A card a phone sent is kept whole in `vcard`. Edits in Postvak write the full details (ContactDetails) into
+ * it; properties Postvak does not know (anniversaries, social profiles, …) stay as they were.
  */
 final class ContactCards
 {
@@ -59,13 +59,28 @@ final class ContactCards
         $name = trim((string) ($row['name'] ?? ''));
         $email = trim((string) ($row['email'] ?? ''));
         $card->FN = $name !== '' ? $name : ($email !== '' ? $email : '?');
-        if (!isset($card->N) || ($name !== '' && self::nameOf($card) !== $name)) {
-            // Simple split: last word is the family name ("Ton l'Abee" → l'Abee; Ton).
-            $parts = preg_split('/\s+/', $name) ?: [];
-            $family = count($parts) > 1 ? array_pop($parts) : '';
-            $card->N = [$family, implode(' ', $parts), '', '', ''];
-        }
 
+        if (!empty($row['details'])) {
+            // Edited with the full form: the details decide the names, addresses, numbers, …
+            $photo = !empty($row['photo']) ? (string) $row['photo'] : null;
+            ContactDetails::toCard($card, ContactDetails::ofRow($row), $photo, $row['photo_mime'] ?? null);
+        } else {
+            self::applySimple($card, $name, $email, (string) ($row['phone'] ?? ''));
+        }
+        unset($card->NOTE);
+        if (trim((string) ($row['notes'] ?? '')) !== '') {
+            $card->NOTE = (string) $row['notes'];
+        }
+        $card->REV = gmdate('Ymd\THis\Z');
+    }
+
+    /** Rows without details (older contacts): only the name, first address and first number. */
+    private static function applySimple(VObject\Component\VCard $card, string $name, string $email, string $phone): void
+    {
+        if (!isset($card->N) || ($name !== '' && self::nameOf($card) !== $name)) {
+            [$given, $family] = ContactDetails::split($name);
+            $card->N = [$family, $given, '', '', ''];
+        }
         $emails = $card->select('EMAIL');
         if ($email === '') {
             // No address in Postvak: keep the card's own list.
@@ -82,13 +97,7 @@ final class ContactCards
                 $emails[0]->setValue($email);
             }
         }
-
-        self::setFirst($card, 'TEL', (string) ($row['phone'] ?? ''), ['TYPE' => 'CELL']);
-        unset($card->NOTE);
-        if (trim((string) ($row['notes'] ?? '')) !== '') {
-            $card->NOTE = (string) $row['notes'];
-        }
-        $card->REV = gmdate('Ymd\THis\Z');
+        self::setFirst($card, 'TEL', $phone, ['TYPE' => 'CELL']);
     }
 
     private static function setFirst(VObject\Component\VCard $card, string $prop, string $value, array $params): void
@@ -114,19 +123,34 @@ final class ContactCards
     }
 
     /**
-     * Fields Postvak keeps from a card sent by a phone.
-     * @return array{name:string, email:?string, extra_emails:?string, phone:?string, notes:?string}
+     * Fields Postvak keeps from a card sent by a phone (or imported).
+     * @return array{name:string, email:?string, extra_emails:?string, phone:?string, notes:?string, details:?string}
      */
     public static function fields(string $vcard): array
     {
         $parsed = VCard::parse($vcard)[0] ?? ['name' => '', 'emails' => [], 'phone' => '', 'notes' => ''];
+        $details = null;
+        try {
+            $card = VObject\Reader::read($vcard, VObject\Reader::OPTION_FORGIVING);
+            if ($card instanceof VObject\Component\VCard) {
+                $details = ContactDetails::fromCard($card);
+            }
+        } catch (Throwable) {
+        }
         $emails = array_values(array_unique($parsed['emails']));
+        $phone = $parsed['phone'];
+        if ($details !== null) {
+            // The details know the order the phone gave (first = main).
+            $emails = array_values(array_unique([...array_column($details['emails'], 'value'), ...$emails]));
+            $phone = $details['phones'][0]['value'] ?? $phone;
+        }
         return [
-            'name'         => mb_substr($parsed['name'], 0, 255),
+            'name'         => mb_substr($parsed['name'] !== '' ? $parsed['name'] : ($details ? ContactDetails::displayName($details) : ''), 0, 255),
             'email'        => $emails[0] ?? null,
             'extra_emails' => count($emails) > 1 ? mb_substr(implode(', ', array_slice($emails, 1)), 0, 1000) : null,
-            'phone'        => $parsed['phone'] !== '' ? mb_substr($parsed['phone'], 0, 64) : null,
+            'phone'        => $phone !== '' ? mb_substr($phone, 0, 64) : null,
             'notes'        => $parsed['notes'] !== '' ? $parsed['notes'] : null,
+            'details'      => $details !== null ? json_encode($details, JSON_UNESCAPED_UNICODE) : null,
         ];
     }
 

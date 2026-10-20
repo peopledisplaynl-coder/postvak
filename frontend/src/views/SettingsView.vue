@@ -8,6 +8,7 @@ import CalendarSettings from '../components/CalendarSettings.vue'
 import RulesSettings from '../components/RulesSettings.vue'
 import AppearanceSettings from '../components/AppearanceSettings.vue'
 import AboutSettings from '../components/AboutSettings.vue'
+import InboxTabSettings from '../components/InboxTabSettings.vue'
 import SharedFilesSettings from '../components/SharedFilesSettings.vue'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
@@ -405,6 +406,7 @@ const pageSizeDevices = computed(() => [
           </span>
           <input type="checkbox" class="size-5 shrink-0 accent-accent" :checked="!!session.settings.inbox_tabs" @change="set('inbox_tabs', $event.target.checked)" />
         </label>
+        <InboxTabSettings v-if="session.settings.inbox_tabs" />
         <label class="flex items-center justify-between gap-4 px-4 py-3">
           <span>{{ t('settings.afterDelete') }}</span>
           <select :value="session.settings.after_delete ?? 'list'" class="shrink-0 rounded-lg bg-sunken px-3 py-1.5" @change="set('after_delete', $event.target.value)">

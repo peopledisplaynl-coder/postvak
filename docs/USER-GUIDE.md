@@ -111,6 +111,22 @@ appear at the top of the inbox:
 The mail stays in your inbox: the tabs are only a way of looking at it. When you search, Postvak searches the
 whole inbox.
 
+**Choosing which tabs you see**: below the Inbox tabs option, tick the tabs you want, just like in Gmail.
+**Primary** is always on. Switch off **Social**, for example, and notifications from Facebook and LinkedIn simply
+land in Primary.
+
+<img src="user-guide/choose-tabs.png" width="560" alt="Choosing which inbox tabs you see">
+
+**Moving a message to another tab**: is a message in the wrong tab, say a mail from your sports club in
+Promotions? Right-click the message (or choose **⋮** in the open message) → **Move to another tab** and pick the
+right one. Postvak remembers this for that sender: their messages already in your inbox move along, and new mail
+from that address goes straight to that tab from now on. **Undo** in the notification takes it back at once.
+
+<img src="user-guide/move-to-tab.png" width="520" alt="Moving a message to another tab">
+
+The senders you placed yourself are listed under **Settings → General**, under **Senders you placed yourself**.
+Click the cross there to let Postvak sort a sender automatically again.
+
 ## 4. Reading mail
 
 Click or tap a message to open it. At the top are the buttons to archive it, delete it, mark it as spam, snooze
@@ -427,7 +443,7 @@ Click **Settings** at the bottom left.
 
 | Tab | What you set here |
 | --- | --- |
-| **General** | Language, how often Postvak checks for new mail, messages to load at a time (phone/tablet and computer), offline reading, inbox tabs, what happens after deleting or archiving, all inboxes together, conversations, undo send, mark as read when opened, version and updates, log out |
+| **General** | Language, how often Postvak checks for new mail, messages to load at a time (phone/tablet and computer), offline reading, inbox tabs (which ones you see, senders you placed yourself), what happens after deleting or archiving, all inboxes together, conversations, undo send, mark as read when opened, version and updates, log out |
 | **Appearance** | Light or dark, accent colour, text size, comfortable or compact, manage labels |
 | **Swipe** | What swiping left and right does, how long Undo stays, confirmation before deleting |
 | **Notifications** | Notifications on this device, on or off per account, test notification |
@@ -513,6 +529,10 @@ warning about the background job, tell your administrator.
 **My mailbox is (nearly) full.**
 Check at the bottom left how much space you use. Empty the trash and spam, and look under **Attachments** for large
 files you no longer need. Need more space? Your administrator or hosting provider arranges that.
+
+**A message is in the wrong inbox tab.**
+Choose **⋮ → Move to another tab** on the message (or right-click it in the list). New mail from that sender will
+then go to the right tab by itself.
 
 **A newsletter keeps coming after unsubscribing.**
 Some senders take a few days to process it. If it keeps coming, choose **⋮ → Block sender**.

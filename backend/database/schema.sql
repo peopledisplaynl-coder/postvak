@@ -489,4 +489,15 @@ CREATE TABLE IF NOT EXISTS followups (
     CONSTRAINT fk_followups_account FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT IGNORE INTO schema_migrations (version) VALUES ('001_initial'), ('002_trusted_senders_admin'), ('003_message_snippets'), ('004_contacts'), ('005_push_notifications'), ('006_scheduled_snooze'), ('007_two_factor'), ('008_push_language'), ('009_calendar'), ('010_feeds_carddav'), ('011_rules_autoreply_templates'), ('012_signature_images'), ('013_shared_files'), ('014_contact_details'), ('015_mute_followup_signatures');
+CREATE TABLE IF NOT EXISTS inbox_tab_senders (
+    id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    account_id      INT UNSIGNED NOT NULL,
+    sender          VARCHAR(255) NOT NULL,           -- lower-case address
+    category        VARCHAR(20) NOT NULL,            -- primary | promotions | social | updates
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_inbox_tab_sender (account_id, sender),
+    CONSTRAINT fk_inbox_tab_senders_account FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_migrations (version) VALUES ('001_initial'), ('002_trusted_senders_admin'), ('003_message_snippets'), ('004_contacts'), ('005_push_notifications'), ('006_scheduled_snooze'), ('007_two_factor'), ('008_push_language'), ('009_calendar'), ('010_feeds_carddav'), ('011_rules_autoreply_templates'), ('012_signature_images'), ('013_shared_files'), ('014_contact_details'), ('015_mute_followup_signatures'), ('016_inbox_tab_senders');

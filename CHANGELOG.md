@@ -3,6 +3,18 @@
 All notable changes to Postvak. The format follows [Keep a Changelog](https://keepachangelog.com/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.8.1] - 2026-10-20
+
+### Added
+- Inbox tabs: choose which tabs you see (Primary is always on, like Gmail); mail of a tab that is off lands in Primary.
+- Move a message to another tab (⋮ menu or right-click → "Move to another tab"): Postvak remembers it for that
+  sender, their mail already in the inbox moves along and new mail goes straight there. Undo in the notification;
+  Settings → General lists the senders you placed yourself, with a way to sort them automatically again.
+  Database update 016 runs by itself.
+
+### Changed
+- User guides (Dutch and English, also as PDF and Word) cover choosing and moving between inbox tabs.
+
 ## [1.8.0] - 2026-10-20
 
 ### Added

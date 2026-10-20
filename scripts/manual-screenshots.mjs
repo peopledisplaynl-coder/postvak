@@ -22,7 +22,7 @@ const L = {
     search: 'Zoeken in mail', unread: 'Ongelezen', clear: 'Wissen', back: 'Terug', compose: 'Nieuw bericht', subject: 'Onderwerp',
     to: 'marieke@voorbeeld.nl', subj: 'Zaterdag', body: 'Hoi Marieke,\n\nZullen we om tien uur afspreken bij de markt? ', bold: 'Neem de lijst mee!',
     file: 'Vakantiefilm.mp4', asLink: 'downloadlink', close: 'Sluiten', menu: 'Instellingen', more: 'Meer acties', edit: 'Bewerken', contact: 'Marieke de Vries',
-    tabs: /Inboxtabbladen/, shop: /Webwinkel/, images: 'Afbeeldingen', month: 'Maand',
+    tabs: /Inboxtabbladen/, moveTo: 'Naar ander tabblad', shop: /Webwinkel/, images: 'Afbeeldingen', month: 'Maand',
     names: {},
   },
   en: {
@@ -30,7 +30,7 @@ const L = {
     search: 'Search mail', unread: 'Unread', clear: 'Clear', back: 'Back', compose: 'New message', subject: 'Subject',
     to: 'maria@example.org', subj: 'Saturday', body: 'Hi Maria,\n\nShall we meet at ten at the market? ', bold: 'Bring the list!',
     file: 'Holiday video.mp4', asLink: 'download link', close: 'Close', menu: 'Settings', more: 'More actions', edit: 'Edit', contact: 'Maria Lopez',
-    tabs: /Inbox tabs/, shop: /Web Shop/, images: 'Images', month: 'Month',
+    tabs: /Inbox tabs/, moveTo: 'Move to another tab', shop: /Web Shop/, images: 'Images', month: 'Month',
     names: {
       inloggen: 'login', overzicht: 'overview', 'snel-antwoorden': 'quick-reply', labels: 'labels', zoeken: 'search', schrijven: 'compose',
       'grote-bijlage': 'large-file', 'instellingen-algemeen': 'settings-general', 'instellingen-weergave': 'settings-appearance',
@@ -39,7 +39,7 @@ const L = {
       'telefoon-lijst': 'phone-list', 'telefoon-menu': 'phone-menu', 'telefoon-bericht': 'phone-message',
       rechtermuisknop: 'right-click', 'contact-bewerken': 'contact-edit', 'telefoon-menu-bericht': 'phone-message-menu',
       'inbox-tabbladen': 'inbox-tabs', waarschuwing: 'warning', opvolgen: 'follow-up', uitschrijven: 'unsubscribe',
-      bijlagen: 'attachments', verjaardagen: 'birthdays',
+      bijlagen: 'attachments', verjaardagen: 'birthdays', 'tabbladen-kiezen': 'choose-tabs', 'naar-tabblad': 'move-to-tab',
     },
   },
 }
@@ -218,8 +218,27 @@ for (const lang of langs) {
     await shot('inbox-tabbladen', async () => {
       await go(page, '/settings/general')
       await page.getByRole('checkbox', { name: T.tabs }).check()
+      await page.waitForTimeout(500)
       await go(page, '/mail/1?folder=INBOX')
       await page.screenshot({ path: out('inbox-tabbladen'), clip: { x: 0, y: 0, width: 680, height: 420 } })
+    })
+    await shot('naar-tabblad', async () => {
+      await rows(page).nth(1).locator('[role=button]').click({ button: 'right' })
+      await page.getByRole('menuitem', { name: T.moveTo }).click()
+      await page.waitForTimeout(400)
+      const box = await page.getByRole('menu').boundingBox()
+      const x = Math.max(0, box.x - 300)
+      const y = Math.max(0, box.y - 60)
+      await page.screenshot({ path: out('naar-tabblad'), clip: { x, y, width: Math.min(1280 - x, box.width + 340), height: Math.min(800 - y, box.height + 120) } })
+      await page.keyboard.press('Escape')
+      await page.keyboard.press('Escape')
+    })
+    await shot('tabbladen-kiezen', async () => {
+      await go(page, '/settings/general')
+      const part = page.locator('fieldset').first().locator('xpath=..')
+      await part.scrollIntoViewIfNeeded()
+      await part.screenshot({ path: out('tabbladen-kiezen') })
+      await go(page, '/mail/1?folder=INBOX')
     })
     await shot('bijlagen', async () => {
       await go(page, '/attachments')

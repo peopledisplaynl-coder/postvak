@@ -36,6 +36,7 @@ final class SettingsRepository
         'page_size'        => 50,              // messages per page in the list (computer)
         'page_size_mobile' => 25,              // same on a phone or tablet
         'inbox_tabs'       => false,           // inbox split into Primary / Promotions / Social / Updates
+        'inbox_tab_list'   => ['promotions', 'social', 'updates'], // the tabs that are on besides Primary
         'after_delete'     => 'list',          // after deleting/archiving the open message: list | next | previous
         'show_birthdays'   => true,            // birthdays of contacts in the calendar
         // Labels = IMAP keywords. The first five use Thunderbird's keywords, so they show there too.
@@ -71,6 +72,7 @@ final class SettingsRepository
         'page_size'         => ['int', 5, 100],
         'page_size_mobile'  => ['int', 5, 100],
         'inbox_tabs'        => ['bool'],
+        'inbox_tab_list'    => ['subset', ['promotions', 'social', 'updates']],
         'after_delete'      => ['enum', ['list', 'next', 'previous']],
         'show_birthdays'    => ['bool'],
         'labels'            => ['labels'],
@@ -137,6 +139,12 @@ final class SettingsRepository
                 return $value;
             case 'bool':
                 return (bool) $value;
+            case 'subset':
+                // A list of some of the allowed values, kept in their own order.
+                if (!is_array($value) || array_filter($value, static fn ($v) => !is_string($v)) !== [] || array_diff($value, $rule[1]) !== []) {
+                    throw HttpException::badRequest("Invalid value for $key");
+                }
+                return array_values(array_intersect($rule[1], $value));
             case 'labels':
                 // [{key, name, color}], at most 20; an empty name means "use the translated default name".
                 if (!is_array($value) || count($value) > 20) {

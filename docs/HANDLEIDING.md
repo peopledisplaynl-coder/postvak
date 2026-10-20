@@ -113,6 +113,23 @@ Wil je, zoals in Gmail, je inbox opgesplitst zien? Zet dan onder **Instellingen 
 De mail blijft gewoon in je inbox staan: de tabbladen zijn alleen een manier van kijken. Zoek je iets, dan zoekt
 Postvak in de hele inbox.
 
+**Kiezen welke tabbladen je ziet**: onder de optie Inboxtabbladen vink je aan welke tabbladen je wilt, net als in
+Gmail. **Primair** staat altijd aan. Zet je bijvoorbeeld **Sociaal** uit, dan komen meldingen van Facebook en
+LinkedIn gewoon in Primair.
+
+<img src="handleiding/tabbladen-kiezen.png" width="560" alt="Kiezen welke inboxtabbladen je ziet">
+
+**Een bericht naar een ander tabblad verplaatsen**: staat een bericht in het verkeerde tabblad, bijvoorbeeld een
+mail van je sportclub in Reclame? Klik met de rechtermuisknop op het bericht (of kies in het geopende bericht
+**⋮**) → **Naar ander tabblad** en kies het juiste tabblad. Postvak onthoudt dat voor die afzender: zijn berichten
+die al in je inbox staan verhuizen mee, en nieuwe mail van dat adres komt voortaan meteen in dat tabblad. Met
+**Ongedaan maken** in de melding draai je het meteen terug.
+
+<img src="handleiding/naar-tabblad.png" width="520" alt="Een bericht naar een ander tabblad verplaatsen">
+
+Welke afzenders je zelf hebt ingedeeld, zie je onder **Instellingen → Algemeen**, onder **Zelf ingedeelde
+afzenders**. Klik daar op het kruisje om een afzender weer automatisch te laten indelen.
+
 ## 4. Mail lezen
 
 Klik of tik op een bericht om het te openen. Bovenaan staan de knoppen om het te archiveren, verwijderen,
@@ -439,7 +456,7 @@ Klik links onderaan op **Instellingen**.
 
 | Tabblad | Wat stel je hier in |
 | --- | --- |
-| **Algemeen** | Taal, hoe vaak Postvak naar nieuwe mail kijkt, berichten per keer laden (telefoon/tablet en computer), offline lezen, inboxtabbladen, wat er gebeurt na verwijderen of archiveren, Alle inboxen, gesprekken, versturen ongedaan maken, als gelezen markeren bij openen, versie en updates, uitloggen |
+| **Algemeen** | Taal, hoe vaak Postvak naar nieuwe mail kijkt, berichten per keer laden (telefoon/tablet en computer), offline lezen, inboxtabbladen (welke je ziet, zelf ingedeelde afzenders), wat er gebeurt na verwijderen of archiveren, Alle inboxen, gesprekken, versturen ongedaan maken, als gelezen markeren bij openen, versie en updates, uitloggen |
 | **Weergave** | Licht of donker, accentkleur, tekstgrootte, ruim of compact, labels beheren |
 | **Vegen** | Wat naar links en naar rechts vegen doet, hoe lang Ongedaan maken blijft staan, bevestiging bij verwijderen |
 | **Meldingen** | Meldingen op dit apparaat, per account aan of uit, testmelding |
@@ -525,6 +542,10 @@ staat er een waarschuwing over de achtergrondtaak, waarschuw dan je beheerder.
 **Mijn mailbox is (bijna) vol.**
 Kijk links onderaan hoeveel ruimte je gebruikt. Leeg de prullenbak en spam, en zoek onder **Bijlagen** naar grote
 bestanden die je niet meer nodig hebt. Meer ruimte nodig? Dat regelt je beheerder of hostingpartij.
+
+**Een bericht staat in het verkeerde inboxtabblad.**
+Kies bij het bericht **⋮ → Naar ander tabblad** (of klik met de rechtermuisknop in de lijst). Nieuwe mail van die
+afzender komt daarna vanzelf in het goede tabblad.
 
 **Een nieuwsbrief blijft komen, ook na uitschrijven.**
 Afmelden kan bij sommige afzenders een paar dagen duren. Blijft het komen, kies dan **⋮ → Afzender blokkeren**.

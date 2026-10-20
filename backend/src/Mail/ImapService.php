@@ -824,6 +824,26 @@ final class ImapService
         $this->keyword = $keyword !== null && self::validKeyword($keyword) ? $keyword : null;
     }
 
+    /** Which inbox tabs are on and which senders were moved by hand (see MessageInsights::category). */
+    private ?array $tabs = null;
+
+    public function tabContext(): array
+    {
+        if ($this->tabs === null) {
+            $enabled = MessageInsights::TABS;
+            $senders = [];
+            try {
+                $settings = (new \Postvak\Repositories\SettingsRepository())->get((int) ($this->account['user_id'] ?? 0));
+                $enabled = array_values(array_intersect(MessageInsights::TABS, (array) ($settings['inbox_tab_list'] ?? MessageInsights::TABS)));
+                $senders = (new \Postvak\Repositories\InboxTabSenders())->map((int) ($this->account['id'] ?? 0));
+            } catch (Throwable) {
+                // no database (tests) or table not there yet: headers only
+            }
+            $this->tabs = ['enabled' => $enabled, 'senders' => $senders];
+        }
+        return $this->tabs;
+    }
+
     /** Search filters: unseen, flagged, attachment, since (days back), from (address). */
     private array $filters = [];
 
@@ -846,6 +866,7 @@ final class ImapService
         }
         if (in_array($category, ['primary', 'promotions', 'social', 'updates'], true)) {
             $f['category'] = $category;
+            $f['tabs'] = $this->tabContext();
         }
         $this->filters = $f;
     }
@@ -872,7 +893,7 @@ final class ImapService
             array_push($c, 'FROM', '"' . addcslashes($from, '"\\') . '"');
         }
         if (!empty($f['category'])) {
-            array_push($c, ...MessageInsights::searchCriteria((string) $f['category']));
+            array_push($c, ...MessageInsights::searchCriteria((string) $f['category'], $f['tabs'] ?? null));
         }
         return $c;
     }
@@ -995,7 +1016,7 @@ final class ImapService
             'labels'          => self::labelsFrom($rawFlags),
             // Without fetching the body, multipart/mixed is a good indication of attachments.
             'has_attachments' => str_contains($contentType, 'multipart/mixed'),
-            'category'        => MessageInsights::category($rawHeader, $from['email'] ?? null),
+            'category'        => MessageInsights::category($rawHeader, $from['email'] ?? null, $this->tabContext()),
             'followup'        => isset($flags['$followup']),
         ];
     }

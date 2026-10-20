@@ -295,9 +295,9 @@ const emptyText = computed(() => (mail.search ? t('list.emptySearch') : t('list.
     <!-- Inbox tabs, like Gmail (setting "Inbox tabs") -->
     <div v-if="mail.tabsActive && !searching" class="flex border-b border-line" role="tablist" :aria-label="t('tabs.label')">
       <button
-        v-for="tab in INBOX_TABS" :key="tab.key" role="tab" :aria-selected="mail.category === tab.key"
+        v-for="tab in INBOX_TABS.filter((x) => mail.enabledTabs.includes(x.key))" :key="tab.key" role="tab" :aria-selected="mail.currentTab === tab.key"
         class="flex min-w-0 flex-1 items-center justify-center gap-1.5 border-b-2 px-2 py-2.5 text-sm transition"
-        :class="mail.category === tab.key ? 'border-accent font-medium text-accent' : 'border-transparent text-muted hover:bg-sunken hover:text-ink'"
+        :class="mail.currentTab === tab.key ? 'border-accent font-medium text-accent' : 'border-transparent text-muted hover:bg-sunken hover:text-ink'"
         @click="mail.setCategory(tab.key)"
       >
         <AppIcon :name="tab.icon" :size="16" class="shrink-0" /><span class="truncate">{{ t(`tabs.${tab.key}`) }}</span>

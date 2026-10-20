@@ -448,3 +448,27 @@ test('attachments overview and storage bar', async ({ page, isMobile }) => {
   await page.getByText('zaal.png').first().click()
   await expect(page).toHaveURL(/uid=/)
 })
+
+test('inbox tabs: choose the tabs and move a sender to another tab', async ({ page }) => {
+  await login(page)
+  await goInApp(page, '/settings')
+  await page.getByRole('checkbox', { name: /Inboxtabbladen/ }).check()
+  await page.getByRole('checkbox', { name: 'Sociaal', exact: true }).uncheck()
+  await goInApp(page, '/')
+  const tabs = page.getByRole('tablist', { name: 'Inboxtabbladen' })
+  await expect(tabs.getByRole('tab')).toHaveCount(3)
+  await expect(tabs.getByRole('tab', { name: 'Sociaal' })).toHaveCount(0)
+  // A newsletter that is not one: move the sender to Primary.
+  await tabs.getByRole('tab', { name: 'Reclame' }).click()
+  await expect(rows(page).first()).toContainText(/Webwinkel/)
+  const before = await rows(page).count()
+  await rows(page).first().locator('[role=button]').click()
+  await page.getByRole('button', { name: 'Meer acties' }).first().click()
+  await page.getByRole('menuitem', { name: 'Naar ander tabblad' }).click()
+  await page.getByRole('menuitemradio', { name: 'Primair' }).click()
+  await expect(page.getByText(/komt voortaan in Primair/)).toBeVisible()
+  await expect.poll(() => rows(page).count()).toBeLessThan(before)
+  // It is listed in the settings, where it can be reset.
+  await goInApp(page, '/settings')
+  await expect(page.getByText('Zelf ingedeelde afzenders')).toBeVisible()
+})

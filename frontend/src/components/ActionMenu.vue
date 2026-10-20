@@ -101,13 +101,16 @@ function onKey(e) {
         <div v-if="!item" class="my-1 border-t border-line" role="separator" />
         <button
           v-else
-          :role="item.checked !== undefined ? 'menuitemcheckbox' : 'menuitem'"
+          :role="item.checked === undefined ? 'menuitem' : item.radio ? 'menuitemradio' : 'menuitemcheckbox'"
           :aria-checked="item.checked !== undefined ? item.checked : undefined"
           class="flex w-full items-center gap-3 px-3 py-2 text-left outline-none hover:bg-sunken focus-visible:bg-sunken"
           :class="item.danger ? 'text-danger' : ''"
           @click.stop="choose(item)"
         >
-          <span v-if="item.checked !== undefined" class="flex size-4 shrink-0 items-center justify-center rounded border" :style="{ borderColor: item.color, background: item.checked ? item.color : 'transparent' }">
+          <span v-if="item.radio" class="flex size-4 shrink-0 items-center justify-center rounded-full border-2" :class="item.checked ? 'border-accent' : 'border-line'">
+            <span v-if="item.checked" class="size-2 rounded-full bg-accent" />
+          </span>
+          <span v-else-if="item.checked !== undefined" class="flex size-4 shrink-0 items-center justify-center rounded border" :style="{ borderColor: item.color, background: item.checked ? item.color : 'transparent' }">
             <AppIcon v-if="item.checked" name="check" :size="12" class="text-white" />
           </span>
           <AppIcon v-else :name="item.icon" :size="18" :class="item.danger ? '' : 'text-muted'" />

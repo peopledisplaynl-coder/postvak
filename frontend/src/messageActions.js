@@ -8,7 +8,7 @@ import { t } from './i18n/index.js'
 
 /**
  * The actions for one or more messages, as menu items (for the ⋮ menu of the reader on small screens and the
- * right-click menu of the list). An item: { id, icon, label, run, danger?, checked?, keepOpen?, children? };
+ * right-click menu of the list). An item: { id, icon, label, run, danger?, checked?, radio?, keepOpen?, children? };
  * null is a divider.
  *
  * ctx = {
@@ -79,6 +79,17 @@ export function messageActions(ctx) {
         id: `label:${l.key}`, label: labelName(l), color: l.color, keepOpen: true,
         get checked() { return targets.every((m) => has(m, l.key)) },
         run() { mail.setLabel(messages, l.key, !this.checked, extra) },
+      })),
+    })
+  }
+  // Inbox tabs: put this sender in another tab, now and for new mail.
+  if (single && role === 'inbox' && session.settings.inbox_tabs && single.from?.email && !own(single)) {
+    const current = mail.enabledTabs.includes(single.category) ? single.category : 'primary'
+    add({
+      id: 'tab', icon: 'inboxes', label: t('tabs.moveTo'),
+      children: mail.enabledTabs.map((key) => ({
+        id: `tab:${key}`, label: t(`tabs.${key}`), radio: true, checked: current === key,
+        run: () => { if (key !== current) mail.moveToTab(single, key) },
       })),
     })
   }

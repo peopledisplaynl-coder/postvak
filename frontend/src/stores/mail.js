@@ -25,6 +25,9 @@ export const ALL = 'all'
 const messageCall = (ref, images = false) => [`/accounts/${ref.account_id}/messages/${ref.uid}`, { folder: ref.folder, images: images ? 1 : undefined, tz: timeZone() }]
 const messageUrl = (ref) => apiUrl(...messageCall(ref))
 
+/** The inbox tabs besides Primary. */
+export const INBOX_TABS = ['promotions', 'social', 'updates']
+
 /** Unique key of a message in a list: the same uid can exist in two accounts. */
 export const msgKey = (m) => `${m.account_id}:${m.uid}`
 
@@ -111,7 +114,16 @@ export const useMail = defineStore('mail', {
     filtersActive: (s) => Object.entries(s.filters).some(([k, v]) => v && v !== noFilters()[k]),
     /** Inbox tabs apply: the setting is on, an inbox is open and nothing is being searched. */
     tabsActive() {
-      return !!useSession().settings.inbox_tabs && this.folderRole === 'inbox' && !this.search && !this.filtersActive && !this.labelFilter
+      return !!useSession().settings.inbox_tabs && this.enabledTabs.length > 1 && this.folderRole === 'inbox' && !this.search && !this.filtersActive && !this.labelFilter
+    },
+    /** Primary plus the tabs switched on in the settings (Gmail lets you pick them too). */
+    enabledTabs() {
+      const on = useSession().settings.inbox_tab_list ?? INBOX_TABS
+      return ['primary', ...INBOX_TABS.filter((k) => on.includes(k))]
+    },
+    /** The tab being shown; one that was switched off falls back to Primary. */
+    currentTab() {
+      return this.enabledTabs.includes(this.category) ? this.category : 'primary'
     },
     folderRole() {
       return this.unified ? 'inbox' : this.currentFolder?.role ?? null
@@ -157,7 +169,7 @@ export const useMail = defineStore('mail', {
 
     /** Identifies what the list shows, so an answer for an older request can be ignored. */
     listKey() {
-      return `${this.accountId}:${this.folderPath}:${this.search}:${this.labelFilter}:${JSON.stringify(this.filters)}:${this.tabsActive ? this.category : ''}`
+      return `${this.accountId}:${this.folderPath}:${this.search}:${this.labelFilter}:${JSON.stringify(this.filters)}:${this.tabsActive ? this.currentTab : ''}`
     },
 
     setCategory(category) {
@@ -192,7 +204,7 @@ export const useMail = defineStore('mail', {
         body: this.search && this.searchBody ? 1 : undefined,
         label: this.labelFilter || undefined,
         ...filterQuery(this.filters),
-        category: this.tabsActive ? this.category : undefined,
+        category: this.tabsActive ? this.currentTab : undefined,
       }
       return this.unified
         ? api.get('/unified/messages', query)
@@ -567,6 +579,40 @@ export const useMail = defineStore('mail', {
         commit: (group, keepalive) => api.post(`/accounts/${group.accountId}/unsnooze`, { uids: group.messages.flatMap(uidsOf) }, { keepalive }),
       }, t(n > 1 ? 'toast.unsnoozedMany' : 'toast.unsnoozed', { n }))
       return true
+    },
+
+    /**
+     * Put a sender in another inbox tab, now and for new mail (like Gmail's "move to tab"). Their messages in the
+     * list leave it when another tab is shown. Undo returns the sender to sorting by the headers.
+     */
+    async moveToTab(message, category) {
+      const email = message.from?.email?.toLowerCase()
+      if (!email) return
+      try {
+        await api.post(`/accounts/${message.account_id}/inbox-tab-senders`, { email, category })
+      } catch (e) {
+        useToasts().error(t('toast.failed', { msg: e.message }))
+        return
+      }
+      const same = (m) => m.account_id === message.account_id && m.from?.email?.toLowerCase() === email
+      for (const m of this.messages) if (same(m)) m.category = category
+      if (this.tabsActive && category !== this.currentTab) {
+        const leaving = this.messages.filter(same)
+        const keys = leaving.map(msgKey)
+        if (keys.includes(this.openKey)) this.openKey = null
+        this.messages = this.messages.filter((m) => !keys.includes(msgKey(m)))
+        this.total = Math.max(0, this.total - leaving.length)
+      }
+      useToasts().show(t('tabs.moved', { email, tab: t(`tabs.${category}`) }), {
+        seconds: 8,
+        action: {
+          label: t('actions.undo'),
+          run: async () => {
+            await api.del(`/accounts/${message.account_id}/inbox-tab-senders`, { email }).catch(() => {})
+            this.loadMessages({ silent: true, restart: true })
+          },
+        },
+      })
     },
 
     /** Drop a row from the list without undo (e.g. a scheduled message that was sent or cancelled). */

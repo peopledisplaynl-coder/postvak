@@ -235,6 +235,11 @@ users, linked accounts, preferences and contacts.
   address and a Reply-To on another domain) and the inbox tab (social domains, mailing lists/bulk = promotions,
   no-reply/notification senders and `Auto-Submitted` = updates, the rest primary). `searchCriteria()` finds the
   same groups on the IMAP server, so the tabs page and count like any folder (setting `inbox_tabs`).
+  Which tabs are on is the setting `inbox_tab_list` (Primary always; a tab that is off sends its mail to Primary).
+  Senders moved by hand ("move to tab") are kept per account in `inbox_tab_senders` (at most 300) and win over the
+  headers: the search for a tab becomes `OR (FROM moved-here…) (automatic criteria NOT FROM any-moved…)`, using
+  parenthesised groups so it stays one IMAP search. `ImapService::tabContext()` loads both for the summaries
+  (`category`) and the search.
 - **Mute** (`Mail\MutedThreads`): the Message-IDs of the conversation go into `muted_threads`; `MailProcessor`
   marks a new reply that refers to one of them as read and archives it (and remembers its id too).
 - **Block sender** is a rule (`from is <address>` → trash) made from the reader, with undo.
@@ -277,6 +282,8 @@ All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` b
 | GET | `/accounts/{id}/messages/{uid}/source?folder=&download=` | The original message (text/plain), or as `.eml` with `download=1` |
 | POST | `/accounts/{id}/messages/{uid}/unsubscribe` | `{folder}`: one-click or mailto unsubscribe → `{done, method, url?}` (`done:false` with a `url` to open) |
 | POST | `/accounts/{id}/messages/{uid}/mute` | `{folder, muted}`: ignore the conversation (or stop) |
+| GET | `/inbox-tab-senders` | Senders moved to another inbox tab, all accounts: `[{account_id, sender, category}]` |
+| POST / DELETE | `/accounts/{id}/inbox-tab-senders` | `{email, category}`: mail from this sender goes to that tab from now on; DELETE `?email=` sorts it by the headers again |
 | GET | `/accounts/{id}/quota` | `{used, limit}` in bytes, or null |
 | GET | `/accounts/{id}/attachments?folder=&page=&q=` | Messages with attachments, newest first, with `attachments: [{name, mime, size}]` (25 per page) |
 | POST | `/accounts/{id}/folders/read` | `{path}`: mark everything in the folder as read |

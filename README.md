@@ -32,7 +32,8 @@ on your phone (PWA). No Node.js, no daemons, no SSH needed on the server.
   period, more from this sender. Mark all as read, empty trash and spam.
 - The list loads a set number of messages at a time (separately for phone/tablet and computer) and the rest as you scroll.
 - Snooze: a message disappears and comes back to the inbox at the time you choose.
-- Optional inbox tabs (Primary, Promotions, Social, Updates), sorted by the mail server.
+- Optional inbox tabs (Primary, Promotions, Social, Updates), sorted by the mail server; pick the tabs you want and
+  move a sender to another tab for good.
 - One-click unsubscribe from mailings, a warning on mail whose sender could not be verified, block a sender,
   mute a conversation, view or download the original (.eml).
 - Attachments overview: every file in a folder at a glance. After deleting, open the next message if you like.

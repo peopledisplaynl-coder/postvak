@@ -32,7 +32,27 @@ test('inbox tabs: social, promotions, updates, primary', function () {
     assertSame('primary', MI::category('', 'marieke@voorbeeld.nl'));
     $c = MI::searchCriteria('primary');
     assertSame('NOT', $c[0]);
-    assertTrue(in_array('List-Unsubscribe', $c, true));
+    assertTrue(str_contains(implode(' ', $c), 'List-Unsubscribe'));
+});
+
+test('inbox tabs: switched-off tabs go to Primary, moved senders win', function () {
+    $tabs = ['enabled' => ['promotions', 'updates'], 'senders' => ['news@shop.example' => 'primary', 'jan@voorbeeld.nl' => 'updates']];
+    assertSame('primary', MI::category('', 'notification@facebookmail.com', $tabs)); // Social is off
+    assertSame('primary', MI::category("List-Unsubscribe: <https://x.example/u>\r\n", 'news@shop.example', $tabs));
+    assertSame('updates', MI::category('', 'Jan@Voorbeeld.nl', $tabs));
+    // A sender moved to a tab that is off ends up in Primary too.
+    assertSame('primary', MI::category('', 'x@y.nl', ['enabled' => ['updates'], 'senders' => ['x@y.nl' => 'social']]));
+    // Search: Primary = moved there OR (not automatically elsewhere AND not moved), as one OR of two groups.
+    $p = MI::searchCriteria('primary', $tabs);
+    assertSame('OR', $p[0]);
+    assertSame('(FROM "news@shop.example")', $p[1]);
+    assertTrue(str_starts_with($p[2], '(NOT (') && str_contains($p[2], 'NOT (OR FROM "news@shop.example" FROM "jan@voorbeeld.nl")'));
+    // Social is off: Primary is not "NOT social" (social mail stays in Primary), but Promotions still leaves social mail out.
+    assertTrue(!str_contains($p[2], 'NOT (OR FROM "facebookmail.com"'));
+    // A tab that is off is searched as Primary.
+    assertSame($p, MI::searchCriteria('social', $tabs));
+    $u = MI::searchCriteria('updates', $tabs);
+    assertSame(['OR', '(FROM "jan@voorbeeld.nl")'], array_slice($u, 0, 2));
 });
 
 test('muted threads: ids from References, In-Reply-To and Message-ID', function () {

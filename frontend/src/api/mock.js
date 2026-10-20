@@ -52,7 +52,7 @@ const accounts = [
 let settings = {
   swipe_left: 'trash', swipe_right: 'archive', confirm_delete: false, undo_seconds: 5,
   theme: 'system', density: 'comfortable', show_images: 'ask', reading_pane: 'right',
-  poll_seconds: 60, unified_inbox: true, mark_read_on_open: true, sort: 'date_desc', accent: 'indigo', text_size: 'normal', page_size: 50, page_size_mobile: 25, inbox_tabs: false, after_delete: 'list', show_birthdays: true,
+  poll_seconds: 60, unified_inbox: true, mark_read_on_open: true, sort: 'date_desc', accent: 'indigo', text_size: 'normal', page_size: 50, page_size_mobile: 25, inbox_tabs: false, inbox_tab_list: ['promotions', 'social', 'updates'], after_delete: 'list', show_birthdays: true,
   labels: [['$label1', '#D23F3F'], ['$label2', '#E07B1A'], ['$label3', '#0F8A5F'], ['$label4', '#2C7DA0'], ['$label5', '#7A5AC8']].map(([key, color]) => ({ key, name: '', color })),
 }
 
@@ -139,6 +139,13 @@ function makeMessages(accountId, folder, count) {
 const mutedMock = new Set()
 
 /** The search filters of the list request (filter=unseen,flagged,attachment&since=7&from=…). */
+const tabSenders = [] // {account_id, sender, category}
+function tabOf(m) {
+  const moved = tabSenders.find((x) => x.account_id === m.account_id && x.sender === m.from.email.toLowerCase())
+  const cat = moved?.category ?? m.category
+  return cat === 'primary' || (settings.inbox_tab_list ?? []).includes(cat) ? cat : 'primary'
+}
+
 function applyFilters(list, query) {
   const flags = String(query.filter ?? '').split(',')
   if (flags.includes('unseen')) list = list.filter((x) => !x.seen)
@@ -146,7 +153,10 @@ function applyFilters(list, query) {
   if (flags.includes('attachment')) list = list.filter((x) => x.has_attachments)
   if (query.since) list = list.filter((x) => Date.parse(x.date) > Date.now() - Number(query.since) * 86400000)
   if (query.from) list = list.filter((x) => x.from.email.toLowerCase() === String(query.from).toLowerCase())
-  if (query.category) list = list.filter((x) => x.category === query.category)
+  if (query.category) {
+    // Like the server: a sender moved by hand wins, a tab that is off goes to Primary.
+    list = list.map((x) => ({ ...x, category: tabOf(x) })).filter((x) => x.category === query.category)
+  }
   return list
 }
 
@@ -225,6 +235,7 @@ export async function mockRequest(method, path, { body = {}, query = {}, form = 
   if (cal !== undefined) return cal
   const session = () => ({ user: { id: 1, login_email: accounts[0].email, is_admin: true }, accounts, settings, csrf: 'mock' })
 
+  if (path === '/inbox-tab-senders') return JSON.parse(JSON.stringify(tabSenders))
   if (path === '/trusted-senders' && method === 'GET') return trusted
   if (path === '/trusted-senders' && method === 'POST') { const item = { id: trusted.length + 1, ...body }; trusted.push(item); return item }
   if (path.startsWith('/trusted-senders/') && method === 'DELETE') { trusted.splice(trusted.findIndex((x) => x.id === Number(path.split('/').pop())), 1); return null }
@@ -386,6 +397,13 @@ export async function mockRequest(method, path, { body = {}, query = {}, form = 
     const key = `${id}:${mute[1]}`
     body.muted === false ? mutedMock.delete(key) : mutedMock.add(key)
     return { muted: body.muted !== false }
+  }
+  if (sub === '/inbox-tab-senders') {
+    const email = String(body?.email ?? query.email ?? '').toLowerCase()
+    const i = tabSenders.findIndex((x) => x.account_id === id && x.sender === email)
+    if (i >= 0) tabSenders.splice(i, 1)
+    if (method === 'POST') { tabSenders.push({ account_id: id, sender: email, category: body.category }); return { email, category: body.category } }
+    return null
   }
   if (sub === '/attachments') {
     const files = [

@@ -123,11 +123,11 @@ final class MessageInsights
     /** Parts of a sender address that mark automatic notifications (the "Updates" tab). */
     public const UPDATE_SENDERS = ['noreply', 'no-reply', 'donotreply', 'do-not-reply', 'notification', 'alert@', 'alerts@', 'billing@', 'invoice', 'factuur', 'facturen'];
 
-    /**
-     * Inbox tab: social, promotions, updates or primary. Kept in step with searchCriteria(), which finds the same
-     * messages on the IMAP server.
-     */
-    public static function category(string $raw, ?string $fromEmail): string
+    /** The tabs besides Primary; the user can switch each one off (its mail then shows under Primary). */
+    public const TABS = ['promotions', 'social', 'updates'];
+
+    /** Inbox tab as worked out from the headers alone: social, promotions, updates or primary. */
+    public static function autoCategory(string $raw, ?string $fromEmail): string
     {
         $from = strtolower((string) $fromEmail);
         foreach (self::SOCIAL_DOMAINS as $social) {
@@ -146,23 +146,69 @@ final class MessageInsights
         return stripos(self::header($raw, 'Auto-Submitted'), 'auto-') !== false ? 'updates' : 'primary';
     }
 
-    /** IMAP SEARCH criteria for one inbox tab. */
-    public static function searchCriteria(string $category): array
+    /**
+     * The tab a message is shown in. $tabs: ['enabled' => tabs switched on, 'senders' => [address => tab]] —
+     * a sender the user moved wins over the headers; a tab that is off sends its mail to Primary.
+     * Kept in step with searchCriteria(), which finds the same messages on the IMAP server.
+     */
+    public static function category(string $raw, ?string $fromEmail, ?array $tabs = null): string
     {
+        $cat = $tabs['senders'][strtolower((string) $fromEmail)] ?? self::autoCategory($raw, $fromEmail);
+        $enabled = $tabs['enabled'] ?? self::TABS;
+        return $cat === 'primary' || in_array($cat, $enabled, true) ? $cat : 'primary';
+    }
+
+    /** IMAP SEARCH criteria for one inbox tab (see category()). */
+    public static function searchCriteria(string $category, ?array $tabs = null): array
+    {
+        $enabled = array_values(array_intersect(self::TABS, $tabs['enabled'] ?? self::TABS));
+        if ($category !== 'primary' && !in_array($category, $enabled, true)) {
+            $category = 'primary';
+        }
+        $senders = $tabs['senders'] ?? [];
         $or = static function (array $keys) use (&$or): array {
             return count($keys) === 1 ? $keys[0] : ['OR', ...$keys[0], ...$or(array_slice($keys, 1))];
         };
         $q = static fn (string $s): string => '"' . addcslashes($s, '"\\') . '"';
+        // One parenthesised search key (IMAP: "(" key *(SP key) ")"), usable after NOT or as an OR operand.
+        $group = static fn (array $tokens): string => '(' . implode(' ', $tokens) . ')';
+        $fromAny = static fn (array $addresses): array => $or(array_map(static fn ($a) => ['FROM', $q($a)], $addresses));
+
+        $base = self::baseCriteria($or, $q);
+        if ($category === 'primary') {
+            $auto = [];
+            foreach ($enabled as $tab) {
+                array_push($auto, 'NOT', $group($base[$tab]));
+            }
+            if ($auto === []) {
+                $auto = ['ALL'];
+            }
+        } else {
+            $auto = $base[$category];
+        }
+        if ($senders === []) {
+            return $auto;
+        }
+        // Senders moved by hand: their mail goes to the chosen tab (or Primary when that tab is off), never by headers.
+        $mine = array_keys(array_filter($senders, static fn ($tab) => $category === 'primary'
+            ? ($tab === 'primary' || !in_array($tab, $enabled, true))
+            : $tab === $category));
+        $notMoved = ['NOT', $group($fromAny(array_keys($senders)))];
+        $autoPart = [...($auto === ['ALL'] ? [] : $auto), ...$notMoved];
+        return $mine === [] ? $autoPart : ['OR', $group($fromAny($mine)), $group($autoPart)];
+    }
+
+    /** The headers-only criteria per tab (mutually exclusive, like autoCategory()). @return array<string, array> */
+    private static function baseCriteria(callable $or, callable $q): array
+    {
         $social = $or(array_map(static fn ($d) => ['FROM', $q($d)], self::SOCIAL_DOMAINS));
         $promo = ['OR', 'HEADER', 'List-Unsubscribe', '""', 'HEADER', 'Precedence', $q('bulk')];
         $updates = $or([...array_map(static fn ($p) => ['FROM', $q($p)], self::UPDATE_SENDERS), ['HEADER', 'Auto-Submitted', $q('auto-')]]);
-        return match ($category) {
+        return [
             'social'     => $social,
             'promotions' => [...$promo, 'NOT', ...$social],
             'updates'    => [...$updates, 'NOT', ...$promo, 'NOT', ...$social],
-            'primary'    => ['NOT', ...$social, 'NOT', ...$promo, 'NOT', ...$updates],
-            default      => [],
-        };
+        ];
     }
 
     /** "mail.ing.nl" → "ing.nl" (good enough to compare; not a public-suffix list). */

@@ -274,7 +274,7 @@ function reply(payload) {
           <button class="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white" @click="unsnooze">{{ t('actions.unsnooze') }}</button>
         </div>
 
-        <h2 v-if="titleReady" class="text-[22px] leading-snug font-semibold text-balance">
+        <h2 v-if="titleReady" class="text-[1.375rem] leading-snug font-semibold text-balance">
           {{ subject || t('list.noSubject') }}
           <span v-if="isConversation" class="ml-1 align-middle text-sm font-normal text-muted">{{ t('reader.inConversation', { n: items.length }) }}</span>
         </h2>

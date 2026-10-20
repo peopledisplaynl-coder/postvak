@@ -64,6 +64,11 @@ users, linked accounts, preferences and contacts.
    `data-blocked-src` unless the user allowed images.
 2. Browser: DOMPurify runs again, then the result is shown in an `<iframe srcdoc>` with
    `sandbox="allow-same-origin allow-popups"`, so no script can run even if something slipped through.
+3. Fit and size (`MessageBody.layoutFrame`): the body gets CSS `zoom` for the text size setting (small 0.92 …
+   extra large 1.25); when the laid-out mail is still wider than the frame (fixed-width newsletters), the zoom is
+   lowered until it fits, like Gmail. "Original size" switches the fitting off for that message. A ResizeObserver
+   lays it out again when the frame gets wider or narrower. The app's own sizes are in rem, so the text size
+   (root font size 14.5 / 16 / 18 / 20 px) scales the whole interface.
 
 ## Swipe and undo
 

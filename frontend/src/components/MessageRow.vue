@@ -266,14 +266,14 @@ function onClick() {
           </span>
         </div>
         <div class="flex items-center gap-2">
-          <span class="truncate text-[14px]" :class="message.seen ? 'text-muted' : 'text-ink'">
+          <span class="truncate text-[0.875rem]" :class="message.seen ? 'text-muted' : 'text-ink'">
             {{ message.subject || t('list.noSubject') }}
             <span v-if="compact && message.snippet" class="text-muted"> – {{ message.snippet }}</span>
           </span>
           <span class="ml-auto flex shrink-0 items-center gap-1 text-muted">
             <span
               v-for="l in labels" :key="l.key"
-              class="hidden max-w-24 truncate rounded-full px-1.5 py-px text-[11px] font-medium leading-4 sm:inline-block"
+              class="hidden max-w-24 truncate rounded-full px-1.5 py-px text-[0.6875rem] font-medium leading-4 sm:inline-block"
               :style="{ background: l.color + '22', color: l.color }"
             >{{ labelName(l) }}</span>
             <span v-for="l in labels" :key="'dot' + l.key" class="size-2 rounded-full sm:hidden" :style="{ background: l.color }" :title="labelName(l)" />
@@ -282,7 +282,7 @@ function onClick() {
             <AppIcon v-if="message.flagged" name="flag" :size="15" class="text-flag fill-current" />
           </span>
         </div>
-        <p v-if="!compact && message.snippet" class="truncate text-[13px] text-muted">{{ message.snippet }}</p>
+        <p v-if="!compact && message.snippet" class="truncate text-[0.8125rem] text-muted">{{ message.snippet }}</p>
       </div>
 
       <!-- Hover actions on desktop -->

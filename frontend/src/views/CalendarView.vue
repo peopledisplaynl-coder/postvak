@@ -429,7 +429,7 @@ const chipStyle = (ev) => ({ background: `color-mix(in srgb, ${ev.color} 16%, va
       </div>
       <div ref="grid" class="relative min-h-0 flex-1 overflow-y-auto">
         <div class="relative flex" :style="{ height: `${24 * HOUR}px` }">
-          <div class="w-12 shrink-0 text-right text-[11px] text-muted">
+          <div class="w-12 shrink-0 text-right text-[0.6875rem] text-muted">
             <div v-for="h in 24" :key="h" class="relative pr-1.5" :style="{ height: `${HOUR}px` }">
               <span v-if="h > 1" class="absolute -top-2 right-1.5 tabular-nums">{{ String(h - 1).padStart(2, '0') }}:00</span>
             </div>

@@ -32,7 +32,7 @@ final class SettingsRepository
         'undo_send'        => 5,               // seconds to undo "send" (0 = send right away)
         'language'         => 'auto',          // auto (browser) | nl | en
         'accent'           => 'indigo',        // colour of buttons and highlights
-        'text_size'        => 'normal',        // small | normal | large
+        'text_size'        => 'normal',        // small | normal | large | xlarge (also the mail text)
         'page_size'        => 50,              // messages per page in the list (computer)
         'page_size_mobile' => 25,              // same on a phone or tablet
         'inbox_tabs'       => false,           // inbox split into Primary / Promotions / Social / Updates
@@ -68,7 +68,7 @@ final class SettingsRepository
         'undo_send'         => ['int', 0, 30],
         'language'          => ['enum', ['auto', 'nl', 'en']],
         'accent'            => ['enum', self::ACCENTS],
-        'text_size'         => ['enum', ['small', 'normal', 'large']],
+        'text_size'         => ['enum', ['small', 'normal', 'large', 'xlarge']],
         'page_size'         => ['int', 5, 100],
         'page_size_mobile'  => ['int', 5, 100],
         'inbox_tabs'        => ['bool'],

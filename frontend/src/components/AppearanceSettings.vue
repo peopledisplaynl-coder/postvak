@@ -56,6 +56,14 @@ function removeLabel(label) {
 }
 
 const field = 'rounded-lg bg-sunken px-3 py-1.5'
+
+const compact = computed(() => session.settings.density === 'compact')
+// The mail text follows the text size too (see MessageBody: 15px × the same factor).
+const mailSize = computed(() => `${15 * ({ small: 0.92, normal: 1, large: 1.12, xlarge: 1.25 }[session.settings.text_size] ?? 1)}px`)
+const previewRows = computed(() => [
+  { from: t('appearance.sample1From'), subject: t('appearance.sample1Subject'), snippet: t('appearance.sample1Snippet'), time: '10:42', unread: true, initials: 'MV', color: '#B4478F' },
+  { from: t('appearance.sample2From'), subject: t('appearance.sample2Subject'), snippet: t('appearance.sample2Snippet'), time: '09:15', unread: false, initials: 'PJ', color: '#3646D9' },
+])
 const canAdd = computed(() => labels.value.length < 20)
 </script>
 
@@ -93,16 +101,48 @@ const canAdd = computed(() => labels.value.length < 20)
           <option value="small">{{ t('appearance.small') }}</option>
           <option value="normal">{{ t('appearance.normal') }}</option>
           <option value="large">{{ t('appearance.large') }}</option>
+          <option value="xlarge">{{ t('appearance.xlarge') }}</option>
         </select>
       </label>
 
       <label class="flex items-center justify-between gap-4 px-4 py-3">
-        <span>{{ t('settings.density') }}</span>
+        <span>
+          {{ t('settings.density') }}
+          <span class="block text-sm text-muted">{{ t('appearance.densityHint') }}</span>
+        </span>
         <select :value="session.settings.density" :class="field" @change="set('density', $event.target.value)">
           <option value="comfortable">{{ t('settings.comfortable') }}</option>
           <option value="compact">{{ t('settings.compact') }}</option>
         </select>
       </label>
+    </section>
+
+    <!-- Live preview: shows at once what text size, density and accent colour do -->
+    <section>
+      <h2 class="mb-1 font-medium">{{ t('appearance.preview') }}</h2>
+      <p class="mb-3 text-sm text-muted">{{ t('appearance.previewHint') }}</p>
+      <div class="overflow-hidden rounded-2xl bg-surface ring-1 ring-line" aria-hidden="true">
+        <div v-for="(row, i) in previewRows" :key="i" class="flex gap-3 border-b border-line px-4 last:border-b-0" :class="[compact ? 'py-2' : 'py-3', i === 0 ? 'bg-accent-soft' : '']">
+          <span v-if="!compact" class="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white" :style="{ background: row.color }">{{ row.initials }}</span>
+          <span v-else class="mt-0.5 size-5 shrink-0 rounded-md ring-1 ring-line" />
+          <div class="min-w-0 flex-1">
+            <div class="flex items-baseline gap-2">
+              <span v-if="row.unread" class="size-2 shrink-0 self-center rounded-full bg-accent" />
+              <span class="truncate" :class="row.unread ? 'font-semibold' : 'text-ink/80'">{{ row.from }}</span>
+              <span class="ml-auto shrink-0 text-xs tabular-nums" :class="row.unread ? 'font-medium text-accent' : 'text-muted'">{{ row.time }}</span>
+            </div>
+            <p class="truncate text-[0.875rem]" :class="row.unread ? 'text-ink' : 'text-muted'">
+              {{ row.subject }}<span v-if="compact" class="text-muted"> – {{ row.snippet }}</span>
+            </p>
+            <p v-if="!compact" class="truncate text-[0.8125rem] text-muted">{{ row.snippet }}</p>
+          </div>
+        </div>
+        <div class="border-t border-line px-4 py-4">
+          <p class="mb-1 font-semibold">{{ t('appearance.sampleTitle') }}</p>
+          <p class="text-muted" :style="{ fontSize: mailSize }">{{ t('appearance.sampleText') }}</p>
+          <span class="mt-3 inline-block rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-white">{{ t('actions.reply') }}</span>
+        </div>
+      </div>
     </section>
 
     <section>

@@ -144,10 +144,14 @@ Op een **telefoon** staan bovenaan alleen de drie meest gebruikte knoppen, extra
 - **Gesprekken**: antwoorden op elkaar staan bij elkaar, inclusief je eigen antwoorden uit Verzonden. Klik op
   een ingeklapt bericht om het te openen. (Uitzetten kan onder Instellingen → Algemeen.)
 - **Afbeeldingen**: plaatjes van internet worden eerst niet geladen, zodat afzenders niet kunnen zien dat je
-  hun mail opent. Kies **Nu tonen**, of **Altijd tonen** voor die afzender of dat domein.
+  hun mail opent. Kies **Nu tonen**, of onder **Altijd tonen** voor die afzender of dat hele domein.
 - **Bijlagen**: afbeeldingen en pdf's open je in Postvak zelf; andere bestanden download je.
-- **Bij de afzender** staan drie knoppen: **een regel maken** (trechter), **meer van deze afzender** (vergrootglas)
-  en **aan contacten toevoegen**.
+- **Bij de afzender** staan op de computer drie knoppen: **een regel maken** (trechter), **meer van deze afzender**
+  (vergrootglas) en **aan contacten toevoegen**. Op de telefoon tik je op **aan …** onder de naam: dan zie je de
+  volledige adressen en datum, met dezelfde drie knoppen.
+- **Brede nieuwsbrieven** maakt Postvak passend op je scherm, net als Gmail, zodat je niet opzij hoeft te schuiven.
+  Wil je het bericht toch op ware grootte zien (om in te zoomen op een detail), tik dan onder het bericht op
+  **Ware grootte tonen**.
 - **Uitnodigingen** voor een afspraak verschijnen als kaartje met **Ja**, **Misschien** en **Nee**. Je antwoord
   gaat naar de organisator en de afspraak komt in je agenda.
 - **Afdrukken**: het printer-icoon onder het bericht.
@@ -457,7 +461,7 @@ Klik links onderaan op **Instellingen**.
 | Tabblad | Wat stel je hier in |
 | --- | --- |
 | **Algemeen** | Taal, hoe vaak Postvak naar nieuwe mail kijkt, berichten per keer laden (telefoon/tablet en computer), offline lezen, inboxtabbladen (welke je ziet, zelf ingedeelde afzenders), wat er gebeurt na verwijderen of archiveren, Alle inboxen, gesprekken, versturen ongedaan maken, als gelezen markeren bij openen, versie en updates, uitloggen |
-| **Weergave** | Licht of donker, accentkleur, tekstgrootte, ruim of compact, labels beheren |
+| **Weergave** | Licht of donker, accentkleur, tekstgrootte (klein tot extra groot, ook voor de tekst van je mail), ruim of compact, een voorbeeld, labels beheren |
 | **Vegen** | Wat naar links en naar rechts vegen doet, hoe lang Ongedaan maken blijft staan, bevestiging bij verwijderen |
 | **Meldingen** | Meldingen op dit apparaat, per account aan of uit, testmelding |
 | **Regels en afwezig** | Regels voor nieuwe mail en de afwezigheidsmelding |
@@ -467,6 +471,10 @@ Klik links onderaan op **Instellingen**.
 | **Mappen** | Mappen maken, hernoemen en verwijderen |
 | **Accounts** | Mailadressen toevoegen, naam, kleur en handtekeningen |
 | **Over Postvak** | Versie, wie Postvak maakt, licentie en links |
+
+Onder **Weergave** zie je meteen een **voorbeeld** van de berichtenlijst en een bericht. Zo zie je wat de
+instellingen doen: **Tekstgrootte** maakt alle tekst groter of kleiner, ook de tekst van je mails; **Ruim** toont
+een foto-rondje en een voorbeeldregel, **Compact** zet meer berichten op het scherm.
 
 <p align="center">
   <img src="handleiding/instellingen-weergave.png" width="400" alt="Instellingen, tabblad Weergave">

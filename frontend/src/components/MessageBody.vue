@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, computed, nextTick } from 'vue'
+import { ref, watch, computed, nextTick, onBeforeUnmount } from 'vue'
 import DOMPurify from 'dompurify'
 import AppIcon from './AppIcon.vue'
 import AttachmentViewer from './AttachmentViewer.vue'
@@ -9,7 +9,7 @@ import { useMail } from '../stores/mail.js'
 import { useSession } from '../stores/session.js'
 import { useToasts } from '../stores/toasts.js'
 import { api, attachmentUrl } from '../api/client.js'
-import { fullDate, fileSize, displayName, avatarColor, initials } from '../format.js'
+import { fullDate, listDate, fileSize, displayName, avatarColor, initials } from '../format.js'
 import { t } from '../i18n/index.js'
 
 /**
@@ -147,16 +147,73 @@ const srcdoc = computed(() => {
 </style></head><body>${clean}</body></html>`
 })
 
+/**
+ * Fit the mail to the screen, like Gmail: newsletters are often a fixed 600–700 px wide, which does not fit on a
+ * phone. The body is laid out at the chosen text size; when it is still wider than the frame, it is scaled down
+ * (CSS zoom, so links and text stay sharp and clickable). "Original size" turns this off for one message.
+ */
+const TEXT_ZOOM = { small: 0.92, normal: 1, large: 1.12, xlarge: 1.25 }
+const fit = ref(true)
+const shrunk = ref(false)
+function layoutFrame() {
+  const el = frame.value
+  const doc = el?.contentDocument
+  if (!doc?.body) return
+  const want = TEXT_ZOOM[session.settings.text_size] ?? 1
+  const avail = el.clientWidth
+  const body = doc.body
+  body.style.zoom = String(want)
+  let zoom = want
+  const wide = doc.documentElement.scrollWidth
+  if (fit.value && avail > 0 && wide > avail + 1) {
+    zoom = want * (avail / wide)
+    body.style.zoom = String(zoom)
+  }
+  shrunk.value = zoom < want - 0.02 || (!fit.value && wide > avail + 1)
+  frameHeight.value = Math.max(40, Math.ceil(doc.documentElement.scrollHeight))
+}
 function resizeFrame() {
   const doc = frame.value?.contentDocument
   if (!doc) return
-  frameHeight.value = Math.max(40, doc.documentElement.scrollHeight)
-  // Images load later and change the height.
-  doc.querySelectorAll('img').forEach((img) => img.addEventListener('load', () => {
-    frameHeight.value = Math.max(40, doc.documentElement.scrollHeight)
-  }, { once: true }))
+  layoutFrame()
+  // Images load later and change the size.
+  doc.querySelectorAll('img').forEach((img) => img.addEventListener('load', layoutFrame, { once: true }))
 }
-watch(srcdoc, () => nextTick(() => (frameHeight.value = 120)))
+watch(srcdoc, () => nextTick(() => {
+  frameHeight.value = 120
+  fit.value = true
+}))
+watch(() => session.settings.text_size, () => nextTick(layoutFrame))
+watch(fit, () => nextTick(layoutFrame))
+// A turned phone or a dragged column divider changes the room there is.
+let observer = null
+watch(frame, (el) => {
+  observer?.disconnect()
+  if (!el || typeof ResizeObserver === 'undefined') return
+  let lastWidth = el.clientWidth
+  observer = new ResizeObserver(() => {
+    if (Math.abs(el.clientWidth - lastWidth) < 2) return
+    lastWidth = el.clientWidth
+    layoutFrame()
+  })
+  observer.observe(el)
+})
+onBeforeUnmount(() => observer?.disconnect())
+
+// ---- sender details (folded away on small screens, like Gmail)
+const detailsOpen = ref(false)
+const trustOpen = ref(false)
+watch(key, () => {
+  detailsOpen.value = false
+  trustOpen.value = false
+})
+const recipients = computed(() => {
+  const m = message.value
+  if (!m) return ''
+  const to = (m.to ?? []).map(displayName).join(', ')
+  return m.cc?.length ? `${to}, ${t('reader.cc')} ${m.cc.map(displayName).join(', ')}` : to
+})
+const people = (list) => (list ?? []).map((r) => (r.name ? `${r.name} <${r.email}>` : r.email)).join(', ')
 
 // ---- attachments: preview images/PDF, download the rest
 const previewable = (a) => /^(image\/(png|jpe?g|gif|webp)|application\/pdf)$/.test(a.mime)
@@ -248,66 +305,92 @@ defineExpose({ message, reload: load, print: printMessage })
           class="flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
           :style="{ background: avatarColor(message.from?.email) }"
         >{{ initials(message.from) }}</span>
-        <div class="min-w-0 flex-1 text-sm">
-          <p class="truncate">
-            <span class="font-semibold">{{ displayName(message.from) }}</span>
-            <span v-if="message.from?.name" class="text-muted"> &lt;{{ message.from.email }}&gt;</span>
-            <span v-if="badge" class="ml-2 rounded-full bg-sunken px-2 py-0.5 text-xs text-muted">{{ badge }}</span>
-          </p>
-          <p class="truncate text-muted">
-            {{ t('reader.to') }} {{ (message.to ?? []).map(displayName).join(', ') }}
-            <template v-if="message.cc?.length">, {{ t('reader.cc') }} {{ message.cc.map(displayName).join(', ') }}</template>
-          </p>
-          <p class="text-muted">{{ fullDate(message.date) }}</p>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-x-2">
+            <p class="min-w-0 flex-1 truncate">
+              <span class="font-semibold">{{ displayName(message.from) }}</span>
+              <span v-if="message.from?.name" class="text-sm text-muted max-md:hidden"> &lt;{{ message.from.email }}&gt;</span>
+              <span v-if="badge" class="ml-2 rounded-full bg-sunken px-2 py-0.5 text-xs text-muted">{{ badge }}</span>
+            </p>
+            <span class="shrink-0 text-xs text-muted md:hidden">{{ listDate(message.date) }}</span>
+          </div>
+          <button
+            type="button"
+            class="flex max-w-full items-center gap-1 text-left text-sm text-muted hover:text-ink"
+            :aria-expanded="detailsOpen"
+            @click.stop="detailsOpen = !detailsOpen"
+          >
+            <span class="truncate">{{ t('reader.to') }} {{ recipients }}</span>
+            <AppIcon name="chevron" :size="14" class="shrink-0 transition" :class="detailsOpen ? '-rotate-90' : 'rotate-90'" />
+          </button>
+          <p class="text-sm text-muted max-md:hidden">{{ fullDate(message.date) }}</p>
         </div>
         <button
           v-if="message.unsubscribe && !collapsible"
-          class="shrink-0 self-center rounded-full px-3 py-1 text-xs font-medium text-muted ring-1 ring-line hover:bg-sunken hover:text-ink disabled:opacity-50"
+          class="shrink-0 rounded-full px-3 py-1 text-sm font-medium text-accent ring-1 ring-line hover:bg-accent-soft disabled:opacity-50"
           :disabled="unsubscribing"
           @click.stop="unsubscribe"
         >{{ t('unsubscribe.button') }}</button>
-        <RouterLink
-          v-if="senderEmail && !ownAddress"
-          :to="{ path: '/settings/rules', query: { from: senderEmail, name: displayName(message.from), account: target.account_id } }"
-          class="shrink-0 rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink"
-          :title="t('rules.fromMessage')"
-          @click.stop
-        >
-          <AppIcon name="filter" :size="20" />
-        </RouterLink>
-        <button
-          v-if="senderEmail && !ownAddress"
-          class="shrink-0 rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink"
-          :title="t('filters.moreFrom')"
-          @click.stop="moreFromSender"
-        >
-          <AppIcon name="search" :size="20" />
-        </button>
-        <button
-          v-if="senderEmail && !ownAddress"
-          class="shrink-0 rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink disabled:opacity-50"
-          :title="t('reader.addContact')"
-          :disabled="addingContact"
-          @click.stop="addContact"
-        >
-          <AppIcon name="userPlus" :size="20" />
-        </button>
+        <div v-if="senderEmail && !ownAddress" class="flex shrink-0 max-md:hidden">
+          <RouterLink
+            :to="{ path: '/settings/rules', query: { from: senderEmail, name: displayName(message.from), account: target.account_id } }"
+            class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink"
+            :title="t('rules.fromMessage')"
+            @click.stop
+          >
+            <AppIcon name="filter" :size="20" />
+          </RouterLink>
+          <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink" :title="t('filters.moreFrom')" @click.stop="moreFromSender">
+            <AppIcon name="search" :size="20" />
+          </button>
+          <button class="rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink disabled:opacity-50" :title="t('reader.addContact')" :disabled="addingContact" @click.stop="addContact">
+            <AppIcon name="userPlus" :size="20" />
+          </button>
+        </div>
       </div>
 
-      <div v-if="message.blocked_images && session.settings.show_images !== 'always'" class="mt-5 rounded-xl bg-sunken px-4 py-3 text-sm">
-        <p class="text-muted">{{ t('reader.imagesBlocked') }}</p>
-        <div class="mt-2 flex flex-wrap gap-2">
-          <button class="rounded-lg bg-surface px-3 py-1.5 font-medium text-accent ring-1 ring-line hover:bg-accent-soft" @click="load(true)">
-            {{ t('reader.showImages') }}
+      <!-- Details: full addresses and date; on phones also the sender actions -->
+      <div v-if="detailsOpen" class="mt-3 rounded-xl bg-sunken px-4 py-3 text-sm" @click.stop>
+        <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+          <dt class="text-muted">{{ t('print.from') }}</dt><dd class="min-w-0 break-words">{{ people([message.from]) }}</dd>
+          <dt class="text-muted">{{ t('print.to') }}</dt><dd class="min-w-0 break-words">{{ people(message.to) }}</dd>
+          <template v-if="message.cc?.length"><dt class="text-muted">{{ t('print.cc') }}</dt><dd class="min-w-0 break-words">{{ people(message.cc) }}</dd></template>
+          <dt class="text-muted">{{ t('print.date') }}</dt><dd>{{ fullDate(message.date) }}</dd>
+        </dl>
+        <div v-if="senderEmail && !ownAddress" class="mt-3 flex flex-wrap gap-2 md:hidden">
+          <RouterLink
+            :to="{ path: '/settings/rules', query: { from: senderEmail, name: displayName(message.from), account: target.account_id } }"
+            class="flex items-center gap-1.5 rounded-lg bg-surface px-3 py-1.5 ring-1 ring-line"
+          ><AppIcon name="filter" :size="16" />{{ t('rules.fromMessage') }}</RouterLink>
+          <button class="flex items-center gap-1.5 rounded-lg bg-surface px-3 py-1.5 ring-1 ring-line" @click="moreFromSender">
+            <AppIcon name="search" :size="16" />{{ t('filters.moreFrom') }}
           </button>
-          <template v-if="senderEmail">
-            <button class="rounded-lg bg-surface px-3 py-1.5 ring-1 ring-line hover:bg-accent-soft" :disabled="trusting" @click="trust('email', senderEmail)">
-              {{ t('reader.trustSender', { email: senderEmail }) }}
-            </button>
-            <button class="rounded-lg bg-surface px-3 py-1.5 ring-1 ring-line hover:bg-accent-soft" :disabled="trusting" @click="trust('domain', senderDomain)">
-              {{ t('reader.trustDomain', { domain: senderDomain }) }}
-            </button>
-          </template>
+          <button class="flex items-center gap-1.5 rounded-lg bg-surface px-3 py-1.5 ring-1 ring-line disabled:opacity-50" :disabled="addingContact" @click="addContact">
+            <AppIcon name="userPlus" :size="16" />{{ t('reader.addContact') }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Remote images are blocked: one compact bar, the "always" choices folded into a small menu -->
+      <div v-if="message.blocked_images && session.settings.show_images !== 'always'" class="relative mt-4 flex flex-wrap items-center gap-2 rounded-xl bg-sunken px-3 py-2 text-sm">
+        <AppIcon name="image" :size="18" class="shrink-0 text-muted" />
+        <span class="min-w-0 flex-1 text-muted">
+          <span class="md:hidden">{{ t('reader.imagesBlockedShort') }}</span>
+          <span class="max-md:hidden">{{ t('reader.imagesBlocked') }}</span>
+        </span>
+        <button class="rounded-lg bg-surface px-3 py-1.5 font-medium text-accent ring-1 ring-line hover:bg-accent-soft" @click="load(true)">
+          {{ t('reader.showImages') }}
+        </button>
+        <button v-if="senderEmail" class="flex items-center gap-1 rounded-lg bg-surface px-3 py-1.5 ring-1 ring-line hover:bg-accent-soft" :aria-expanded="trustOpen" @click="trustOpen = !trustOpen">
+          {{ t('reader.alwaysShow') }}<AppIcon name="chevron" :size="14" class="rotate-90" />
+        </button>
+        <div v-if="trustOpen" class="absolute top-full right-0 z-20 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl bg-surface py-1 shadow-lg ring-1 ring-line">
+          <button class="block w-full truncate px-4 py-2.5 text-left hover:bg-sunken" :disabled="trusting" @click="trustOpen = false; trust('email', senderEmail)">
+            {{ t('reader.trustSender', { email: senderEmail }) }}
+          </button>
+          <button class="block w-full truncate px-4 py-2.5 text-left hover:bg-sunken" :disabled="trusting" @click="trustOpen = false; trust('domain', senderDomain)">
+            {{ t('reader.trustDomain', { domain: senderDomain }) }}
+          </button>
         </div>
       </div>
 
@@ -322,6 +405,9 @@ defineExpose({ message, reload: load, print: printMessage })
         :title="t('reader.frameTitle')"
         @load="resizeFrame"
       />
+      <button v-if="shrunk || !fit" class="mt-2 text-sm text-accent" @click="fit = !fit">
+        {{ fit ? t('reader.originalSize') : t('reader.fitScreen') }}
+      </button>
 
       <div v-if="attachments.length" class="mt-6">
         <h3 class="mb-2 text-sm font-medium text-muted">{{ t('reader.attachments') }}</h3>

@@ -309,6 +309,10 @@ export default {
     attachments: 'Attachments',
     frameTitle: 'Message',
     select: 'Choose a message to read.',
+    originalSize: 'Show original size',
+    fitScreen: 'Fit to screen',
+    imagesBlockedShort: 'Images hidden',
+    alwaysShow: 'Always show',
   },
 
   editor: {
@@ -778,6 +782,18 @@ export default {
     small: 'Small',
     normal: 'Normal',
     large: 'Large',
+    xlarge: 'Extra large',
+    densityHint: 'Comfortable: with picture and preview line. Compact: more messages on the screen.',
+    preview: 'Preview',
+    previewHint: 'This is how the message list and a message look with these settings. The text size applies to the text of your mail too.',
+    sampleTitle: 'Hi Sam,',
+    sampleText: 'This is how the text of a message looks. Choose a larger size if you would like it easier to read.',
+    sample1From: 'Maria Lopez',
+    sample1Subject: 'Plans for Saturday',
+    sample1Snippet: 'Hi Sam, shall we meet at ten?',
+    sample2From: 'Peter Jones',
+    sample2Subject: 'Photos from the gig',
+    sample2Snippet: 'Here are the photos, enjoy!',
   },
 
   labels: {

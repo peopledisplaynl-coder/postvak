@@ -138,6 +138,16 @@ function makeMessages(accountId, folder, count) {
 }
 const mutedMock = new Set()
 
+/** A typical newsletter: a fixed 640 px wide table, too wide for a phone (Postvak scales it to fit). */
+function newsletter(msg) {
+  const cell = (title) => `<td width="200" style="padding:8px;background:#fff;border:1px solid #eee"><div style="height:120px;background:#ffe2c2"></div><p style="font:bold 15px Arial;color:#1a237e">${title}</p></td>`
+  return `<table width="640" cellpadding="0" cellspacing="0" style="width:640px;background:#ff7f00;font-family:Arial">
+<tr><td style="padding:24px;text-align:center"><p style="font:bold 40px Arial;color:#1a237e;margin:0">WEEK 43</p>
+<p style="font:bold 26px Arial;color:#fff;margin:8px 0 16px">${msg.subject}</p>
+<a href="https://example.com" style="display:inline-block;background:#1a237e;color:#fff;padding:12px 24px;border-radius:24px;font:bold 18px Arial;text-decoration:none">Bekijk alles</a></td></tr>
+<tr><td style="padding:12px"><table width="616" cellspacing="8"><tr>${cell('Houten speelset')}${cell('Neon ledlamp')}${cell('Ledkaarsen')}</tr></table></td></tr></table>`
+}
+
 /** The search filters of the list request (filter=unseen,flagged,attachment&since=7&from=…). */
 const tabSenders = [] // {account_id, sender, category}
 function tabOf(m) {
@@ -378,7 +388,7 @@ export async function mockRequest(method, path, { body = {}, query = {}, form = 
     return {
       ...msg, cc: [], reply_to: [], message_id: `<${msg.uid}@example>`, references: '',
       blocked_images: images ? 0 : 1,
-      html: `${D.body(msg.subject)}
+      html: msg.category === 'promotions' ? newsletter(msg) : `${D.body(msg.subject)}
              <p>${images ? '<img src="https://picsum.photos/480/200" alt="" />' : '<img alt="" />'}</p>
              <p>${D.bye},<br>${msg.from.name}</p>`,
       attachments: msg.has_attachments ? [{ index: 0, name: D.attachment, mime: 'application/pdf', size: 184320, inline: false, url: '#' }] : [],

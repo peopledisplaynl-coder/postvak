@@ -77,7 +77,7 @@ const buttons = [
   <section class="mt-5 overflow-hidden rounded-2xl ring-1 ring-line" :aria-label="t('invite.label')">
     <div class="flex gap-3 bg-sunken/60 px-4 py-3">
       <div class="flex size-11 shrink-0 flex-col items-center justify-center rounded-xl bg-surface text-center ring-1 ring-line" aria-hidden="true">
-        <span class="text-[10px] font-semibold uppercase leading-none text-danger">{{ new Date(inv.all_day ? parseYmd(inv.start) : inv.start).toLocaleDateString(locale(), { month: 'short' }) }}</span>
+        <span class="text-[0.625rem] font-semibold uppercase leading-none text-danger">{{ new Date(inv.all_day ? parseYmd(inv.start) : inv.start).toLocaleDateString(locale(), { month: 'short' }) }}</span>
         <span class="text-lg font-semibold leading-tight">{{ new Date(inv.all_day ? parseYmd(inv.start) : inv.start).getDate() }}</span>
       </div>
       <div class="min-w-0 flex-1">

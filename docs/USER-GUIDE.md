@@ -140,10 +140,13 @@ On a **phone** only the three most used buttons are at the top, extra large: **a
 - **Conversations**: replies to each other are kept together, including your own replies from Sent. Click a
   collapsed message to open it. (You can switch this off under Settings → General.)
 - **Images**: pictures from the internet are not loaded at first, so senders cannot see that you opened their
-  mail. Choose **Show now**, or **Always show** for that sender or domain.
+  mail. Choose **Show now**, or under **Always show** that sender or the whole domain.
 - **Attachments**: images and PDFs open in Postvak itself; other files are downloaded.
-- **Next to the sender** are three buttons: **make a rule** (funnel), **more from this sender** (magnifier) and
-  **add to contacts**.
+- **Next to the sender** a computer shows three buttons: **make a rule** (funnel), **more from this sender**
+  (magnifier) and **add to contacts**. On a phone, tap **to …** under the name to see the full addresses and date,
+  with the same three buttons.
+- **Wide newsletters** are fitted to your screen, as in Gmail, so you do not have to scroll sideways. Want the
+  message at its original size after all (to zoom in on a detail)? Tap **Show original size** below the message.
 - **Invitations** to a meeting appear as a card with **Yes**, **Maybe** and **No**. Your answer goes to the
   organizer and the event is added to your calendar.
 - **Print**: the printer icon below the message.
@@ -444,7 +447,7 @@ Click **Settings** at the bottom left.
 | Tab | What you set here |
 | --- | --- |
 | **General** | Language, how often Postvak checks for new mail, messages to load at a time (phone/tablet and computer), offline reading, inbox tabs (which ones you see, senders you placed yourself), what happens after deleting or archiving, all inboxes together, conversations, undo send, mark as read when opened, version and updates, log out |
-| **Appearance** | Light or dark, accent colour, text size, comfortable or compact, manage labels |
+| **Appearance** | Light or dark, accent colour, text size (small to extra large, also for the text of your mail), comfortable or compact, a preview, manage labels |
 | **Swipe** | What swiping left and right does, how long Undo stays, confirmation before deleting |
 | **Notifications** | Notifications on this device, on or off per account, test notification |
 | **Rules & away** | Rules for new mail and the out-of-office reply |
@@ -454,6 +457,10 @@ Click **Settings** at the bottom left.
 | **Folders** | Create, rename and delete folders |
 | **Accounts** | Add mail addresses, name, colour and signatures |
 | **About** | Version, who makes Postvak, licence, links and this guide |
+
+Under **Appearance** a **preview** of the message list and a message shows straight away what the settings do:
+**Text size** makes all text larger or smaller, the text of your mail included; **Comfortable** shows a picture
+circle and a preview line, **Compact** fits more messages on the screen.
 
 <p align="center">
   <img src="user-guide/settings-appearance.png" width="400" alt="Settings, Appearance tab">

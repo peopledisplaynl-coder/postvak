@@ -128,10 +128,20 @@ test('columns can be resized and reset', async ({ page, isMobile }) => {
   await expect.poll(async () => Math.round((await list.boundingBox()).width)).toBe(Math.round(before))
 })
 
-test('rules: make one from a message, out-of-office reply', async ({ page }) => {
+/** Phones keep the sender buttons under "to …" (the details); computers show them next to the sender. */
+async function senderAction(page, isMobile, name) {
+  if (isMobile) {
+    await page.locator('article button[aria-expanded]').filter({ hasText: /^aan / }).first().click()
+    await page.getByRole(name === 'Regel maken voor deze afzender' ? 'link' : 'button', { name }).first().click()
+  } else {
+    await page.getByTitle(name).first().click()
+  }
+}
+
+test('rules: make one from a message, out-of-office reply', async ({ page, isMobile }) => {
   await login(page)
   await rows(page).first().locator('[role=button]').click()
-  await page.getByTitle('Regel maken voor deze afzender').click()
+  await senderAction(page, isMobile, 'Regel maken voor deze afzender')
   await expect(page).toHaveURL(/settings\/rules/)
   const editor = page.locator('form').filter({ hasText: 'Verplaatsen naar' })
   await expect(editor.locator('input[maxlength="255"]').first()).not.toHaveValue('')
@@ -254,7 +264,7 @@ test('quick reply under a message sends without opening the composer', async ({ 
   await expect(page.locator('form .ProseMirror')).toContainText('Even uitgebreider')
 })
 
-test('search filters: unread, attachment and more from a sender', async ({ page }) => {
+test('search filters: unread, attachment and more from a sender', async ({ page, isMobile }) => {
   await login(page)
   await page.getByRole('button', { name: 'Zoeken' }).first().click()
   const all = await rows(page).count()
@@ -267,7 +277,7 @@ test('search filters: unread, attachment and more from a sender', async ({ page 
 
   // From the reader: "More from this sender".
   await rows(page).first().locator('[role=button]').click()
-  await page.getByTitle('Meer van deze afzender').first().click()
+  await senderAction(page, isMobile, 'Meer van deze afzender')
   await expect(page.getByText(/^Van: /)).toBeVisible()
   await expect.poll(() => rows(page).count()).toBeLessThan(all)
 })

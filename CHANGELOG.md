@@ -3,6 +3,16 @@
 All notable changes to Postvak. The format follows [Keep a Changelog](https://keepachangelog.com/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.8.2] - 2026-10-20
+
+### Changed
+- Wide newsletters fit the screen, like in Gmail (no more cut-off mail on phones); "Show original size" below the
+  message shows it at its own size.
+- Tidier sender block on phones: name and time on one line, "to …" opens the full addresses and date with the sender
+  actions; the Unsubscribe button keeps its place. The remote-images notice is one compact bar.
+- Settings → Appearance does more: the text size (now also Extra large) applies to the whole interface and to the
+  text of your mail, and a live preview shows what text size, density and accent colour do.
+
 ## [1.8.1] - 2026-10-20
 
 ### Added

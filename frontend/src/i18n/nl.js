@@ -310,6 +310,10 @@ export default {
     attachments: 'Bijlagen',
     frameTitle: 'Bericht',
     select: 'Kies een bericht om te lezen.',
+    originalSize: 'Ware grootte tonen',
+    fitScreen: 'Passend maken op het scherm',
+    imagesBlockedShort: 'Afbeeldingen verborgen',
+    alwaysShow: 'Altijd tonen',
   },
 
   editor: {
@@ -779,6 +783,18 @@ export default {
     small: 'Klein',
     normal: 'Normaal',
     large: 'Groot',
+    xlarge: 'Extra groot',
+    densityHint: 'Ruim: met foto en voorbeeldregel. Compact: meer berichten op het scherm.',
+    preview: 'Voorbeeld',
+    previewHint: 'Zo zien de berichtenlijst en een bericht eruit met deze instellingen. Tekstgrootte geldt ook voor de tekst van je mail.',
+    sampleTitle: 'Hoi Ton,',
+    sampleText: 'Zo ziet de tekst van een bericht eruit. Kies een grotere tekst als je het makkelijker wilt lezen.',
+    sample1From: 'Marieke de Vries',
+    sample1Subject: 'Planning voor zaterdag',
+    sample1Snippet: 'Hoi Ton, zullen we om tien uur afspreken?',
+    sample2From: 'Peter Janssen',
+    sample2Subject: "Foto's van het optreden",
+    sample2Snippet: "Hier zijn de foto's, veel plezier ermee!",
   },
 
   labels: {

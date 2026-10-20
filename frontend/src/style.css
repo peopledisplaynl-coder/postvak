@@ -58,10 +58,9 @@ html[data-accent='graphite'] { --color-accent: #374151; --color-accent-soft: #E5
 html[data-accent='graphite'].dark { --color-accent: #7C8798; --color-accent-soft: #2A303A; --color-read: #7C8798; }
 
 /* Text size (Settings → Appearance): everything sized in rem scales along. */
-html[data-text-size='small'] { font-size: 15px; }
-html[data-text-size='small'] body { font-size: 14px; }
-html[data-text-size='large'] { font-size: 17.5px; }
-html[data-text-size='large'] body { font-size: 16.5px; }
+html[data-text-size='small'] { font-size: 14.5px; }
+html[data-text-size='large'] { font-size: 18px; }
+html[data-text-size='xlarge'] { font-size: 20px; }
 
 html,
 body,
@@ -73,7 +72,7 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 0.9375rem; /* 15px at the normal text size; follows Settings → Appearance */
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;

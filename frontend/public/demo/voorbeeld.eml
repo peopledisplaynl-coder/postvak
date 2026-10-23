@@ -1,0 +1,18 @@
+Return-Path: <marieke@voorbeeld.nl>
+Authentication-Results: mx.example.nl; spf=pass smtp.mailfrom=voorbeeld.nl; dkim=pass header.d=voorbeeld.nl; dmarc=pass
+Received: from mail.voorbeeld.nl (mail.voorbeeld.nl [192.0.2.10]) by mx.example.nl with ESMTPS; Wed, 14 Oct 2026 11:20:00 +0200
+From: Marieke de Vries <marieke@voorbeeld.nl>
+To: ton@example.nl
+Subject: Setlist zaterdag
+Date: Wed, 14 Oct 2026 11:20:00 +0200
+Message-ID: <demo-1@voorbeeld.nl>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hoi Ton,
+
+Dit is een voorbeeld van het origineel van een bericht in de demo van Postvak.
+This is a sample original message from the Postvak demo.
+
+Groet,
+Marieke

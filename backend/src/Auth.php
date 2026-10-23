@@ -17,6 +17,19 @@ final class Auth
     /** Without "stay logged in": the session ends when the browser closes, or after this many idle seconds. */
     private const SHORT_IDLE = 8 * 3600;
 
+    /**
+     * Start the session only when the browser has one, or to log in. A request without the cookie (a phone fetching
+     * a file again for its PDF viewer or downloads, an iCal subscription, the health check) must not get a fresh
+     * session cookie: in the same browser that would replace the real one and log the user out.
+     */
+    public static function startIfNeeded(string $path): void
+    {
+        $name = (string) Config::get('session.name', 'postvak_sid');
+        if (isset($_COOKIE[$name]) || in_array($path, ['/auth/login', '/auth/2fa'], true)) {
+            self::start();
+        }
+    }
+
     public static function start(): void
     {
         if (session_status() === PHP_SESSION_ACTIVE) {

@@ -118,9 +118,10 @@ export function messageActions(ctx) {
     }
     add(null)
     // The reader's message carries a signed link that also works where a phone leaves out the login cookie.
-    const loaded = (ctx.extra ?? []).find((m) => m?.source_url && Number(m.uid) === Number(single.uid))
+    const loaded = [...(ctx.loadedMessages ?? []), ...(ctx.extra ?? [])].find((m) => m?.source_url && Number(m.uid) === Number(single.uid))
     const source = loaded?.source_url ?? `accounts/${single.account_id}/messages/${single.uid}/source?folder=${encodeURIComponent(single.folder)}`
-    add({ id: 'source', icon: 'eye', label: t('source.show'), run: () => window.open(attachmentUrl(source), '_blank', 'noopener') })
+    // Shown inside Postvak (MailView): a browser page would have no way back in the installed app.
+    add({ id: 'source', icon: 'eye', label: t('source.show'), run: () => (mail.sourceRequest = { url: attachmentUrl(source), download: attachmentUrl(`${source}&download=1`) }) })
     add({ id: 'eml', icon: 'download', label: t('source.download'), run: () => { location.href = attachmentUrl(`${source}&download=1`) } })
   }
 

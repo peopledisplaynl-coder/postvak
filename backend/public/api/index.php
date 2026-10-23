@@ -23,7 +23,7 @@ header('X-Frame-Options: DENY');
 
 $request = Request::fromGlobals();
 
-Auth::start();
+Auth::startIfNeeded($request->path);
 // Database updates right after a deploy, not only at the next login.
 Postvak\Migrator::ensureCurrent(POSTVAK_VERSION);
 // No CSRF token exists yet before the login is complete (the session cookie is SameSite=Strict).

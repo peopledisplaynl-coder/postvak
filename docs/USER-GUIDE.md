@@ -141,7 +141,8 @@ On a **phone** only the three most used buttons are at the top, extra large: **a
   collapsed message to open it. (You can switch this off under Settings → General.)
 - **Images**: pictures from the internet are not loaded at first, so senders cannot see that you opened their
   mail. Choose **Show now**, or under **Always show** that sender or the whole domain.
-- **Attachments**: images and PDFs open in Postvak itself; other files are downloaded.
+- **Attachments**: images and PDFs open in Postvak itself. In a PDF, zoom with **+** and **−**; **download** and
+  **close** (✕) are at the top right. Other files are downloaded.
 - **Next to the sender** a computer shows three buttons: **make a rule** (funnel), **more from this sender**
   (magnifier) and **add to contacts**. On a phone, tap **to …** under the name to see the full addresses and date,
   with the same three buttons.

@@ -61,6 +61,12 @@ users, linked accounts, preferences and contacts.
   always send it when a file is opened: an installed app on iPhone opens links in Safari, and Chrome on Android
   may fetch a PDF again for its viewer or the download list without the `SameSite=Strict` cookie. Without a valid
   signature these endpoints need the normal session.
+- The session is started only when the request carries the session cookie (or to log in). A request without it
+  (a phone fetching a file again for its PDF viewer or downloads, iCal, health) gets no new session cookie, which
+  in the same browser would replace the real one and log the user out.
+- PDFs are drawn inside the attachment viewer with pdf.js (loaded on demand, its 1.3 MB worker is not precached);
+  the original message is shown in a window inside the app. A separate browser page has no way back in the
+  installed app on a phone.
 
 ## Mail rendering
 

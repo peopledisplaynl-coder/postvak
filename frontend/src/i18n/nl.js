@@ -137,6 +137,9 @@ export default {
   source: {
     show: 'Origineel bekijken',
     download: 'Downloaden als .eml',
+    copy: 'Kopiëren',
+    copied: 'Gekopieerd',
+    failed: 'Het origineel kon niet worden geladen.',
   },
   quota: {
     label: 'Opslag van je mailbox',
@@ -432,9 +435,14 @@ export default {
     view: 'Bekijken',
     download: 'Downloaden',
     openPdf: 'Openen in nieuw tabblad',
-    pdfHint: 'PDF-bestanden opent Postvak in een nieuw tabblad, met de PDF-viewer van je browser.',
     previous: 'Vorige',
     next: 'Volgende',
+    loading: 'Laden…',
+    pdfFailed: 'Deze pdf kan hier niet worden getoond. Download hem om hem te openen.',
+    page: 'Pagina {n} van {total}',
+    zoomIn: 'Inzoomen',
+    zoomOut: 'Uitzoomen',
+    close: 'Sluiten',
   },
   print: {
     print: 'Afdrukken',

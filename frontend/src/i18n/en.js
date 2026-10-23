@@ -136,6 +136,9 @@ export default {
   source: {
     show: 'Show original',
     download: 'Download as .eml',
+    copy: 'Copy',
+    copied: 'Copied',
+    failed: 'The original could not be loaded.',
   },
   quota: {
     label: 'Mailbox storage',
@@ -431,9 +434,14 @@ export default {
     view: 'View',
     download: 'Download',
     openPdf: 'Open in new tab',
-    pdfHint: 'Postvak opens PDF files in a new tab, with your browser\'s PDF viewer.',
     previous: 'Previous',
     next: 'Next',
+    loading: 'Loading…',
+    pdfFailed: 'This PDF cannot be shown here. Download it to open it.',
+    page: 'Page {n} of {total}',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    close: 'Close',
   },
   print: {
     print: 'Print',

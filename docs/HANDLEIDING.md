@@ -145,7 +145,8 @@ Op een **telefoon** staan bovenaan alleen de drie meest gebruikte knoppen, extra
   een ingeklapt bericht om het te openen. (Uitzetten kan onder Instellingen → Algemeen.)
 - **Afbeeldingen**: plaatjes van internet worden eerst niet geladen, zodat afzenders niet kunnen zien dat je
   hun mail opent. Kies **Nu tonen**, of onder **Altijd tonen** voor die afzender of dat hele domein.
-- **Bijlagen**: afbeeldingen en pdf's open je in Postvak zelf; andere bestanden download je.
+- **Bijlagen**: afbeeldingen en pdf's open je in Postvak zelf. Bij een pdf zoom je in met **+** en **−**;
+  rechtsboven staan **downloaden** en **sluiten** (✕). Andere bestanden download je.
 - **Bij de afzender** staan op de computer drie knoppen: **een regel maken** (trechter), **meer van deze afzender**
   (vergrootglas) en **aan contacten toevoegen**. Op de telefoon tik je op **aan …** onder de naam: dan zie je de
   volledige adressen en datum, met dezelfde drie knoppen.

@@ -482,3 +482,27 @@ test('inbox tabs: choose the tabs and move a sender to another tab', async ({ pa
   await goInApp(page, '/settings')
   await expect(page.getByText('Zelf ingedeelde afzenders')).toBeVisible()
 })
+
+test('a PDF attachment opens inside Postvak, with a close button', async ({ page }) => {
+  await login(page)
+  // A demo message with a PDF attachment.
+  await goInApp(page, '/mail/1?folder=INBOX&uid=999&acc=1')
+  await page.getByText('overzicht.pdf').first().click()
+  const viewer = page.getByRole('dialog', { name: 'overzicht.pdf' })
+  await expect(viewer.locator('canvas').first()).toBeVisible({ timeout: 15000 })
+  await expect(viewer.locator('canvas')).toHaveCount(2)
+  await viewer.getByLabel('Sluiten').click()
+  await expect(page.getByRole('dialog', { name: 'overzicht.pdf' })).toHaveCount(0)
+  await expect(page.locator('article h2').first()).toBeVisible()
+})
+
+test('the original message opens inside Postvak', async ({ page }) => {
+  await login(page)
+  await rows(page).first().locator('[role=button]').click()
+  await page.getByRole('button', { name: 'Meer acties' }).first().click()
+  await page.getByRole('menuitem', { name: 'Origineel bekijken' }).click()
+  const viewer = page.getByRole('dialog', { name: 'Origineel bekijken' })
+  await expect(viewer.getByText('Authentication-Results')).toBeVisible()
+  await viewer.getByLabel('Sluiten').click()
+  await expect(viewer).toHaveCount(0)
+})

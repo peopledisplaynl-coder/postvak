@@ -56,6 +56,7 @@ function openMore(e) {
   const all = messageActions({
     messages: [summary.value],
     extra: loaded.value ? [loaded.value] : [],
+    loadedMessages: [loaded.value, newestLoaded.value].filter(Boolean),
     muted: !!(loaded.value?.muted ?? newestLoaded.value?.muted),
     router,
     onMove: () => (picking.value = true),

@@ -3,6 +3,16 @@
 All notable changes to Postvak. The format follows [Keep a Changelog](https://keepachangelog.com/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.8.4] - 2026-10-23
+
+### Fixed
+- After opening a PDF on a phone you could be logged out when going back to Postvak: a request without the login
+  cookie got a new, empty session cookie that replaced the real one. Requests without the cookie no longer start
+  a session.
+- A PDF opened as a separate page without a close or back button (installed app on a phone). PDFs now open inside
+  Postvak's own viewer (pdf.js), with close, download and zoom; "Show original" opens in a window inside Postvak
+  too, with close, copy and download.
+
 ## [1.8.3] - 2026-10-23
 
 ### Fixed

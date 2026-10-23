@@ -36,6 +36,8 @@ export default defineConfig({
         // Never cache API calls: mail must always come from the server.
         navigateFallbackDenylist: [/^\/api\//, /^\/dav\//, /^\/\.well-known\//, /^\/install\.php/],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // The PDF viewer's worker (1.3 MB) is fetched when a PDF is opened, not stored ahead on every device.
+        globIgnores: ['**/pdf.worker*.js', 'demo/**'],
         // Push notifications: handled in public/push-sw.js.
         importScripts: ['push-sw.js'],
       },

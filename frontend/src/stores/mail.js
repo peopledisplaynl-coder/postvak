@@ -98,6 +98,7 @@ export const useMail = defineStore('mail', {
     pending: new Map(),   // pendingKey -> batch
     drag: null,           // { messages, accountId } while messages are dragged (accountId null = mixed)
     snoozeRequest: null,  // messages waiting for a snooze time (the picker is shown by MailView)
+    sourceRequest: null,  // {url, download} of an original message to show (SourceViewer in MailView)
     labelFilter: null,    // only messages with this label (IMAP keyword) in the current folder
     filters: noFilters(), // search filters: unread, starred, with attachment, period, sender
     category: 'primary',  // inbox tab (when the setting "inbox_tabs" is on)

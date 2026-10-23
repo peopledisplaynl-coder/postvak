@@ -391,13 +391,14 @@ export async function mockRequest(method, path, { body = {}, query = {}, form = 
       html: msg.category === 'promotions' ? newsletter(msg) : `${D.body(msg.subject)}
              <p>${images ? '<img src="https://picsum.photos/480/200" alt="" />' : '<img alt="" />'}</p>
              <p>${D.bye},<br>${msg.from.name}</p>`,
-      attachments: msg.has_attachments ? [{ index: 0, name: D.attachment, mime: 'application/pdf', size: 184320, inline: false, url: '#' }] : [],
+      attachments: msg.has_attachments ? [{ index: 0, name: D.attachment, mime: 'application/pdf', size: 184320, inline: false, url: '/demo/voorbeeld.pdf?demo=1' }] : [],
       invitation: invitationFor(msg),
       unsubscribe: msg.category === 'promotions',
       authenticity: msg.uid === 993 && msg.account_id === 1
         ? { level: 'caution', reasons: ['name_shows_other_address'], spf: 'pass', dkim: 'none', dmarc: null }
         : { level: null, reasons: [], spf: 'pass', dkim: 'pass', dmarc: 'pass' },
       muted: mutedMock.has(`${id}:${msg.uid}`),
+      source_url: '/demo/voorbeeld.eml?demo=1',
     }
   }
   const unsub = sub.match(/^\/messages\/(\d+)\/unsubscribe$/)

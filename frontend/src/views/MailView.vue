@@ -6,6 +6,7 @@ import MessageList from '../components/MessageList.vue'
 import MessageView from '../components/MessageView.vue'
 import AppIcon from '../components/AppIcon.vue'
 import TimePicker from '../components/TimePicker.vue'
+import SourceViewer from '../components/SourceViewer.vue'
 import ShortcutsHelp from '../components/ShortcutsHelp.vue'
 import ColumnResizer from '../components/ColumnResizer.vue'
 import { useSession } from '../stores/session.js'
@@ -166,7 +167,7 @@ async function replyByKey(mode) {
 }
 
 function onKey(e) {
-  if (e.target.closest('input, textarea, select, [contenteditable]') || draft.value || mail.snoozeRequest || showShortcuts.value || e.metaKey || e.ctrlKey || e.altKey) return
+  if (e.target.closest('input, textarea, select, [contenteditable]') || draft.value || mail.snoozeRequest || mail.sourceRequest || showShortcuts.value || e.metaKey || e.ctrlKey || e.altKey) return
   const list = mail.messages
   const i = list.findIndex((m) => msgKey(m) === mail.openKey)
   const current = list[i]
@@ -293,6 +294,7 @@ const layoutStyle = computed(() => ({
     </button>
 
     <ShortcutsHelp v-if="showShortcuts" @close="showShortcuts = false" />
+    <SourceViewer v-if="mail.sourceRequest" :url="mail.sourceRequest.url" :download="mail.sourceRequest.download" @close="mail.sourceRequest = null" />
     <TimePicker v-if="mail.snoozeRequest?.length" mode="snooze" :count="snoozeCount" @pick="onSnoozePick" @close="mail.snoozeRequest = null" />
     <ComposeSheet v-if="draft" :key="draft.message ? msgKey(draft.message) : 'new'" :draft="draft" @close="onComposeClose" />
   </div>

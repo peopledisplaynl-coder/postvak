@@ -56,6 +56,11 @@ users, linked accounts, preferences and contacts.
 - Own IMAP/SMTP servers at a first login only when `login_custom_servers` is on (config or admin page):
   otherwise anyone could pick a server that accepts any password for an unused address of an allowed domain.
 - Failed logins are rate limited per IP and per address (`login_attempts`, hashed values only).
+- Attachment and original-message links are signed (`Http\SignedLink`: HMAC with the app key over user,
+  account, uid, folder and attachment index, valid 6 hours) and work without the session cookie. Phones do not
+  always send it when a file is opened: an installed app on iPhone opens links in Safari, and Chrome on Android
+  may fetch a PDF again for its viewer or the download list without the `SameSite=Strict` cookie. Without a valid
+  signature these endpoints need the normal session.
 
 ## Mail rendering
 
@@ -283,8 +288,8 @@ All endpoints are under `/api`, JSON in and out. Folder paths go in `?folder=` b
 | GET | `/accounts/{id}/messages?folder=&page=&per_page=&q=&sort=` | Message summaries incl. `snippet` (preview line, cached in `message_snippets`); `sort` = `date_desc` (default), `date_asc`, `from`, `subject`, `size_desc`. `threads=1` (with `date_desc`): one row per conversation via `UID THREAD REFS` (or `REFERENCES`); the row is the newest message plus `thread: {count, uids, unseen, flagged, participants}`. Response has `threaded: false` when the server cannot thread. Dates are UTC. Sorted by the server (IMAP SORT), searched in from/to/subject (`body=1`: also the message text); filters `filter=unseen,flagged,attachment`, `since=<days>`, `from=<address>`, `category=primary|promotions|social|updates` (inbox tabs); `per_page` 5–100. Summaries carry `category` and `followup` |
 | GET | `/accounts/{id}/messages/{uid}?folder=&images=1` | Full message, sanitised |
 | GET | `/accounts/{id}/messages/{uid}/conversation?folder=` | The conversation `uid` belongs to, oldest first: messages in this folder (IMAP `THREAD`) plus own replies found in Sent (by `In-Reply-To`/`References`) |
-| GET | `/accounts/{id}/messages/{uid}/attachments/{index}?folder=` | Download |
-| GET | `/accounts/{id}/messages/{uid}/source?folder=&download=` | The original message (text/plain), or as `.eml` with `download=1` |
+| GET | `/accounts/{id}/messages/{uid}/attachments/{index}?folder=` | Download (`inline=1`: show images/PDF); the `url` in a message carries a signature (`u`, `exp`, `sig`) so it also works without the session cookie |
+| GET | `/accounts/{id}/messages/{uid}/source?folder=&download=` | The original message (text/plain), or as `.eml` with `download=1`; `source_url` in a message is the signed link |
 | POST | `/accounts/{id}/messages/{uid}/unsubscribe` | `{folder}`: one-click or mailto unsubscribe → `{done, method, url?}` (`done:false` with a `url` to open) |
 | POST | `/accounts/{id}/messages/{uid}/mute` | `{folder, muted}`: ignore the conversation (or stop) |
 | GET | `/inbox-tab-senders` | Senders moved to another inbox tab, all accounts: `[{account_id, sender, category}]` |

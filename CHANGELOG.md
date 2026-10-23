@@ -3,6 +3,14 @@
 All notable changes to Postvak. The format follows [Keep a Changelog](https://keepachangelog.com/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.8.3] - 2026-10-23
+
+### Fixed
+- Opening or downloading an attachment (for example a PDF) on a phone could show "Not logged in" and the login
+  screen. Attachment links and "Show original" / "Download as .eml" now carry a signature valid for 6 hours for that
+  one file, so they work even where the phone leaves out the login cookie (installed app on iPhone, Chrome's PDF
+  viewer and downloads on Android).
+
 ## [1.8.2] - 2026-10-20
 
 ### Changed

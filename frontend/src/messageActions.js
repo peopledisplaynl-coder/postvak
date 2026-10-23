@@ -117,7 +117,9 @@ export function messageActions(ctx) {
       add({ id: 'block', icon: 'shield', label: t('block.menu'), danger: true, run: () => blockSender(single, ctx.onRemoved) })
     }
     add(null)
-    const source = `accounts/${single.account_id}/messages/${single.uid}/source?folder=${encodeURIComponent(single.folder)}`
+    // The reader's message carries a signed link that also works where a phone leaves out the login cookie.
+    const loaded = (ctx.extra ?? []).find((m) => m?.source_url && Number(m.uid) === Number(single.uid))
+    const source = loaded?.source_url ?? `accounts/${single.account_id}/messages/${single.uid}/source?folder=${encodeURIComponent(single.folder)}`
     add({ id: 'source', icon: 'eye', label: t('source.show'), run: () => window.open(attachmentUrl(source), '_blank', 'noopener') })
     add({ id: 'eml', icon: 'download', label: t('source.download'), run: () => { location.href = attachmentUrl(`${source}&download=1`) } })
   }

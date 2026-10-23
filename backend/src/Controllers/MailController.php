@@ -382,9 +382,10 @@ final class MailController
     /** GET /accounts/{id}/messages/{uid}/source?folder=&download=1 — the original message (headers and all). */
     public function source(Request $r): void
     {
-        [, $imap] = $this->open($r);
         $uid = $r->intParam('uid');
-        $raw = $imap->fetchRaw($this->folderParam($r), $uid);
+        $folder = $this->folderParam($r);
+        [, $imap] = $this->openForLink($r, $uid, $folder, null);
+        $raw = $imap->fetchRaw($folder, $uid);
         if ($r->query('download') === '1') {
             Response::download($raw, "message-$uid.eml", 'message/rfc822');
         }
@@ -394,9 +395,11 @@ final class MailController
     /** GET /accounts/{id}/messages/{uid}/attachments/{index}?folder=INBOX&inline=1 */
     public function attachment(Request $r): void
     {
-        [, $imap] = $this->open($r);
-        $message = $imap->getMessage($this->folderParam($r), $r->intParam('uid'));
+        $uid = $r->intParam('uid');
+        $folder = $this->folderParam($r);
         $index = $r->intParam('index');
+        [, $imap] = $this->openForLink($r, $uid, $folder, $index);
+        $message = $imap->getMessage($folder, $uid);
 
         $i = 0;
         foreach ($message->getAttachments() as $att) {
@@ -599,6 +602,24 @@ final class MailController
         return [$account, new ImapService($account)];
     }
 
+    /**
+     * Like open(), but a signed link (see SignedLink) also works without the session cookie: phones do not always
+     * send it when they open or download a file.
+     */
+    private function openForLink(Request $r, int $uid, string $folder, ?int $index): array
+    {
+        $accountId = $r->intParam('id');
+        $userId = \Postvak\Http\SignedLink::verify($r, $accountId, $uid, $folder, $index);
+        if ($userId === null) {
+            return $this->open($r);
+        }
+        $account = $this->accounts->findOwned($userId, $accountId);
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        return [$account, new ImapService($account)];
+    }
+
     private function folderParam(Request $r): string
     {
         $folder = (string) ($r->query('folder') ?? $r->input('folder') ?? 'INBOX');
@@ -622,6 +643,8 @@ final class MailController
     {
         $base = sprintf('/api/accounts/%d/messages/%d/attachments', $account['id'], $uid);
         $q = '?folder=' . rawurlencode($folder);
+        // Signed, so the file also opens where the phone leaves the session cookie out (see SignedLink).
+        $sign = static fn (?int $index): string => '&' . \Postvak\Http\SignedLink::query((int) $account['user_id'], (int) $account['id'], $uid, $folder, $index);
 
         $attachments = [];
         $cidMap = [];
@@ -629,7 +652,7 @@ final class MailController
         foreach ($m->getAttachments() as $att) {
             $index = $i++;
             $cid = trim((string) ($att->id ?? ''), '<>');
-            $url = "$base/$index$q";
+            $url = "$base/$index$q" . $sign($index);
             $isInline = $att->disposition === 'inline' && $cid !== '';
             if ($cid !== '') {
                 $cidMap[$cid] = $url . '&inline=1';
@@ -685,6 +708,8 @@ final class MailController
             'text'           => $m->hasTextBody() ? $m->getTextBody() : null,
             'blocked_images' => $blocked,
             'attachments'    => $attachments,
+            // The original message (view / .eml), signed like the attachments.
+            'source_url'     => sprintf('/api/accounts/%d/messages/%d/source', $account['id'], $uid) . $q . $sign(null),
         ];
     }
 

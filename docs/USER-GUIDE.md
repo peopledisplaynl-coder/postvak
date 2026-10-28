@@ -170,6 +170,18 @@ above the message:
 
 In doubt? Contact the sender through an address or phone number you already had.
 
+### Where does a link go?
+
+On a computer, rest the mouse on a link in a message and the bottom left shows where the link really goes: first
+the website (in bold), then the full address. That way you can check a link before you click it, also in the
+installed app (which has no status bar like a browser).
+
+If the text of a link shows a website (say *www.ing.nl*) while the link goes to a **different** website, the bar
+turns orange. Click it anyway and Postvak first asks whether you really want to open it. This works on phones too.
+Choose **Don't open** when in doubt.
+
+<img src="user-guide/link-check.png" width="480" alt="Postvak asks you to check a link">
+
 ### Unsubscribing from newsletters
 
 <img src="user-guide/unsubscribe.png" width="560" alt="The Unsubscribe button on a newsletter">
@@ -541,6 +553,11 @@ files you no longer need. Need more space? Your administrator or hosting provide
 **A message is in the wrong inbox tab.**
 Choose **⋮ → Move to another tab** on the message (or right-click it in the list). New mail from that sender will
 then go to the right tab by itself.
+
+**New messages already show as read.**
+Postvak only marks a message read when you open it while it is on your screen (you can switch this off under
+Settings → General → Mark as read when opened). If another mail program or the mail app on your phone reads the
+same mailbox, that program can mark messages read too.
 
 **A newsletter keeps coming after unsubscribing.**
 Some senders take a few days to process it. If it keeps coming, choose **⋮ → Block sender**.

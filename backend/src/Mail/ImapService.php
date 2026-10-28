@@ -1026,10 +1026,23 @@ final class ImapService
     {
         $folder = $this->folder($folderPath);
         try {
-            return $folder->query()->setFetchBody(true)->leaveUnread()->getMessageByUid($uid);
+            // Header and flags first, the body separately with BODY.PEEK. The library's own body fetch uses
+            // RFC822.TEXT, which marks the message read on the server, and only marks it unread again afterwards;
+            // when that second step does not happen (a large message hitting a limit, a dropped connection) the mail
+            // stays read without anyone having opened it.
+            $message = $folder->query()->setFetchBody(false)->leaveUnread()->getMessageByUid($uid);
         } catch (Throwable) {
             throw HttpException::notFound('Message not found');
         }
+        $data = $this->client->getConnection()->fetch(['UID', 'BODY.PEEK[TEXT]'], [$uid], null, IMAP::ST_UID)->validatedData();
+        $text = '';
+        foreach ((array) ($data[$uid] ?? []) as $key => $value) {
+            if (is_string($key) && str_starts_with($key, 'BODY[TEXT]')) {
+                $text = (string) $value;
+            }
+        }
+        $message->parseRawBody($text);
+        return $message;
     }
 
     /** @param int[] $uids */

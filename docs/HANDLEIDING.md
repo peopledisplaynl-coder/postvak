@@ -176,6 +176,18 @@ balk boven het bericht:
 
 Twijfel je? Neem dan contact op met de afzender via een adres of telefoonnummer dat je zelf al had.
 
+### Waar gaat een link naartoe?
+
+Zet je op de computer de muis op een link in een bericht, dan zie je linksonder waar de link echt naartoe gaat:
+eerst de website (vetgedrukt), dan het volledige adres. Zo kun je controleren of een link in orde is voordat je
+erop klikt, ook in de geïnstalleerde app (die heeft geen statusbalk zoals een browser).
+
+Laat de tekst van een link een website zien (bijvoorbeeld *www.ing.nl*) terwijl de link naar een **andere** website
+gaat, dan kleurt die balk oranje. Klik je toch, dan vraagt Postvak eerst of je hem echt wilt openen. Dat werkt
+ook op de telefoon. Kies **Niet openen** als je twijfelt.
+
+<img src="handleiding/link-controle.png" width="480" alt="Postvak vraagt om een link te controleren">
+
 ### Uitschrijven van nieuwsbrieven
 
 <img src="handleiding/uitschrijven.png" width="560" alt="De knop Uitschrijven bij een nieuwsbrief">
@@ -555,6 +567,11 @@ bestanden die je niet meer nodig hebt. Meer ruimte nodig? Dat regelt je beheerde
 **Een bericht staat in het verkeerde inboxtabblad.**
 Kies bij het bericht **⋮ → Naar ander tabblad** (of klik met de rechtermuisknop in de lijst). Nieuwe mail van die
 afzender komt daarna vanzelf in het goede tabblad.
+
+**Nieuwe berichten staan al op gelezen.**
+Postvak markeert een bericht alleen als gelezen als je het opent terwijl het op je scherm staat (uit te zetten onder
+Instellingen → Algemeen → Markeren als gelezen bij openen). Leest een ander mailprogramma of je telefoon-app
+dezelfde mailbox, dan kan dat programma berichten ook als gelezen markeren.
 
 **Een nieuwsbrief blijft komen, ook na uitschrijven.**
 Afmelden kan bij sommige afzenders een paar dagen duren. Blijft het komen, kies dan **⋮ → Afzender blokkeren**.

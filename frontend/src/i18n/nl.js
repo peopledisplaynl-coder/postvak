@@ -191,6 +191,13 @@ export default {
     banner: 'Je bent offline. Je ziet de laatst bewaarde berichten.',
     cleared: 'Offline opslag gewist.',
   },
+  links: {
+    goesElsewhere: 'Let op: andere website',
+    checkTitle: 'Controleer deze link',
+    checkText: 'De tekst van deze link toont {shown}, maar de link gaat naar een andere website. Zo werken nepberichten vaak. Open hem alleen als je de afzender vertrouwt.',
+    dontOpen: 'Niet openen',
+    openAnyway: 'Toch openen',
+  },
   about: {
     manual: 'Handleiding',
     version: 'Versie {version}',

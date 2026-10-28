@@ -75,7 +75,12 @@ users, linked accounts, preferences and contacts.
    `data-blocked-src` unless the user allowed images.
 2. Browser: DOMPurify runs again, then the result is shown in an `<iframe srcdoc>` with
    `sandbox="allow-same-origin allow-popups"`, so no script can run even if something slipped through.
-3. Fit and size (`MessageBody.layoutFrame`): the body gets CSS `zoom` for the text size setting (small 0.92 …
+3. Reading never marks mail read on the server: `ImapService::getMessage` fetches header and flags, then the body
+   with `BODY.PEEK[TEXT]` (the library's own body fetch uses `RFC822.TEXT` and "unmarks" afterwards, which can fail
+   halfway). The reader marks a message read through the flags endpoint, only once the page is visible.
+4. Links (`frontend/src/links.js`): the reader shows where the link under the pointer goes; a link whose text shows
+   another site than its target (base domains differ) asks for confirmation before it opens.
+5. Fit and size (`MessageBody.layoutFrame`): the body gets CSS `zoom` for the text size setting (small 0.92 …
    extra large 1.25); when the laid-out mail is still wider than the frame (fixed-width newsletters), the zoom is
    lowered until it fits, like Gmail. "Original size" switches the fitting off for that message. A ResizeObserver
    lays it out again when the frame gets wider or narrower. The app's own sizes are in rem, so the text size

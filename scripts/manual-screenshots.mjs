@@ -39,7 +39,7 @@ const L = {
       'telefoon-lijst': 'phone-list', 'telefoon-menu': 'phone-menu', 'telefoon-bericht': 'phone-message',
       rechtermuisknop: 'right-click', 'contact-bewerken': 'contact-edit', 'telefoon-menu-bericht': 'phone-message-menu',
       'inbox-tabbladen': 'inbox-tabs', waarschuwing: 'warning', opvolgen: 'follow-up', uitschrijven: 'unsubscribe',
-      bijlagen: 'attachments', verjaardagen: 'birthdays', 'tabbladen-kiezen': 'choose-tabs', 'naar-tabblad': 'move-to-tab',
+      bijlagen: 'attachments', verjaardagen: 'birthdays', 'tabbladen-kiezen': 'choose-tabs', 'naar-tabblad': 'move-to-tab', 'link-controle': 'link-check',
     },
   },
 }
@@ -202,6 +202,15 @@ for (const lang of langs) {
       await page.locator('article [role=alert]').first().waitFor()
       await page.mouse.move(5, 5)
       await page.screenshot({ path: out('waarschuwing'), clip: right })
+    })
+    await shot('link-controle', async () => {
+      await go(page, '/mail/1?folder=INBOX&uid=993&acc=1')
+      await page.frameLocator('article iframe').first().getByRole('link', { name: 'www.ing.nl' }).click()
+      await page.getByRole('alertdialog').waitFor()
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: out('link-controle'), clip: { x: 340, y: 180, width: 600, height: 440 } })
+      await page.keyboard.press('Escape')
+      await page.mouse.click(20, 780)
     })
     await shot('opvolgen', async () => {
       await go(page, '/mail/1?folder=INBOX&uid=995&acc=1')

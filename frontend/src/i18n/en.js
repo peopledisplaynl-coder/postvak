@@ -190,6 +190,13 @@ export default {
     banner: 'You are offline. You see the last saved messages.',
     cleared: 'Offline storage cleared.',
   },
+  links: {
+    goesElsewhere: 'Careful: another website',
+    checkTitle: 'Check this link',
+    checkText: 'The text of this link shows {shown}, but the link goes to another website. Fake messages often work this way. Only open it if you trust the sender.',
+    dontOpen: "Don't open",
+    openAnyway: 'Open anyway',
+  },
   about: {
     manual: 'User guide',
     version: 'Version {version}',

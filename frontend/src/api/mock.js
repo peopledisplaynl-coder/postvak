@@ -390,6 +390,7 @@ export async function mockRequest(method, path, { body = {}, query = {}, form = 
       blocked_images: images ? 0 : 1,
       html: msg.category === 'promotions' ? newsletter(msg) : `${D.body(msg.subject)}
              <p>${images ? '<img src="https://picsum.photos/480/200" alt="" />' : '<img alt="" />'}</p>
+             <p>${msg.uid === 993 ? 'Controleer uw gegevens via <a href="https://ing-veilig.example/inloggen">www.ing.nl</a> of bekijk <a href="https://www.example.org/factuur/2026-10">de factuur</a>.' : 'Meer informatie: <a href="https://www.example.org/info">www.example.org</a>'}</p>
              <p>${D.bye},<br>${msg.from.name}</p>`,
       attachments: msg.has_attachments ? [{ index: 0, name: D.attachment, mime: 'application/pdf', size: 184320, inline: false, url: '/demo/voorbeeld.pdf?demo=1' }] : [],
       invitation: invitationFor(msg),

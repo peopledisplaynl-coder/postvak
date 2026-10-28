@@ -11,6 +11,7 @@ import { useToasts } from '../stores/toasts.js'
 import { api, attachmentUrl } from '../api/client.js'
 import { fullDate, listDate, fileSize, displayName, avatarColor, initials } from '../format.js'
 import { t } from '../i18n/index.js'
+import { describeLink } from '../links.js'
 
 /**
  * One message: sender block, remote-image notice, the sandboxed body, attachments and
@@ -172,10 +173,53 @@ function layoutFrame() {
   shrunk.value = zoom < want - 0.02 || (!fit.value && wide > avail + 1)
   frameHeight.value = Math.max(40, Math.ceil(doc.documentElement.scrollHeight))
 }
+// ---- links: show where a link goes (under the mouse or keyboard focus), check deceptive ones before opening
+const hoverLink = ref(null) // describeLink() result of the link under the pointer
+const confirmLink = ref(null) // a deceptive link waiting for "open anyway"
+function watchLinks(doc) {
+  const linkOf = (e) => e.target?.closest?.('a[href]')
+  const show = (e) => {
+    const a = linkOf(e)
+    hoverLink.value = a ? describeLink(a.href, a.textContent) : null
+  }
+  doc.addEventListener('mouseover', show)
+  doc.addEventListener('focusin', show)
+  doc.addEventListener('mouseout', (e) => { if (linkOf(e) && !e.relatedTarget?.closest?.('a[href]')) hoverLink.value = null })
+  doc.addEventListener('focusout', () => (hoverLink.value = null))
+  doc.addEventListener('click', (e) => {
+    const a = linkOf(e)
+    if (!a) return
+    const info = describeLink(a.href, a.textContent)
+    // The text shows one web address, the link goes to another: ask first.
+    if (info?.mismatch) {
+      e.preventDefault()
+      confirmLink.value = info
+    }
+  })
+}
+function openConfirmed() {
+  const info = confirmLink.value
+  confirmLink.value = null
+  if (info) window.open(info.href, '_blank', 'noopener,noreferrer')
+}
+watch(key, () => {
+  hoverLink.value = null
+  confirmLink.value = null
+})
+function escapeLinkCheck(e) {
+  if (e.key !== 'Escape' || !confirmLink.value) return
+  e.stopPropagation()
+  confirmLink.value = null
+}
+watch(confirmLink, (on) => (on ? window.addEventListener('keydown', escapeLinkCheck, true) : window.removeEventListener('keydown', escapeLinkCheck, true)))
+onBeforeUnmount(() => window.removeEventListener('keydown', escapeLinkCheck, true))
+
 function resizeFrame() {
   const doc = frame.value?.contentDocument
   if (!doc) return
   layoutFrame()
+  hoverLink.value = null
+  watchLinks(doc)
   // Images load later and change the size.
   doc.querySelectorAll('img').forEach((img) => img.addEventListener('load', layoutFrame, { once: true }))
 }
@@ -444,6 +488,33 @@ defineExpose({ message, reload: load, print: printMessage })
         </button>
       </div>
     </template>
+    <!-- Where the link under the mouse goes, like a browser's status bar (an installed app has none) -->
+    <div
+      v-if="hoverLink && !confirmLink"
+      class="pointer-events-none fixed bottom-3 left-3 z-40 flex max-w-[min(92vw,42rem)] items-center gap-2 rounded-lg px-3 py-1.5 text-xs shadow-lg"
+      :class="hoverLink.mismatch ? 'bg-flag text-white' : 'bg-ink text-canvas'"
+      role="status"
+    >
+      <AppIcon :name="hoverLink.kind === 'mail' ? 'mail' : hoverLink.mismatch ? 'shield' : 'link'" :size="14" class="shrink-0" />
+      <span v-if="hoverLink.mismatch" class="shrink-0 font-semibold">{{ t('links.goesElsewhere') }}</span>
+      <span class="min-w-0 truncate"><template v-if="hoverLink.host"><b>{{ hoverLink.host }}</b> · </template>{{ hoverLink.display }}</span>
+    </div>
+
+    <!-- A link whose text shows another address than where it goes -->
+    <div v-if="confirmLink" class="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" @click.self="confirmLink = null">
+      <div class="pb-safe w-full max-w-md rounded-2xl bg-surface p-5 shadow-xl ring-1 ring-line" role="alertdialog" aria-modal="true" :aria-label="t('links.checkTitle')">
+        <div class="mb-3 flex items-center gap-2 font-semibold text-danger">
+          <AppIcon name="shield" :size="20" />{{ t('links.checkTitle') }}
+        </div>
+        <p class="text-sm">{{ t('links.checkText', { shown: confirmLink.mismatch }) }}</p>
+        <p class="mt-2 rounded-lg bg-sunken px-3 py-2 text-sm break-all"><b>{{ confirmLink.host }}</b><br><span class="text-muted">{{ confirmLink.display }}</span></p>
+        <div class="mt-4 flex flex-wrap justify-end gap-2">
+          <button class="rounded-xl bg-accent px-4 py-2 font-medium text-white" @click="confirmLink = null">{{ t('links.dontOpen') }}</button>
+          <button class="rounded-xl px-4 py-2 text-danger ring-1 ring-line hover:bg-sunken" @click="openConfirmed">{{ t('links.openAnyway') }}</button>
+        </div>
+      </div>
+    </div>
+
     <AttachmentViewer v-if="viewerAt !== null" :items="previewItems" :start="viewerAt" @close="viewerAt = null" />
   </div>
 </template>

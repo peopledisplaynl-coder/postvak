@@ -3,6 +3,20 @@
 All notable changes to Postvak. The format follows [Keep a Changelog](https://keepachangelog.com/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.8.5] - 2026-10-28
+
+### Fixed
+- New mail could end up marked as read without being opened. The mail library fetched the text of a message in a way
+  that marks it read on the server and then marked it unread again afterwards; when that second step did not happen
+  (a large message, a dropped connection, the offline-reading prefetch), the message stayed read. Messages are now
+  read with BODY.PEEK, which never changes the read status. Opening a message only marks it read once it is really on
+  screen (not when the app opens in the background).
+
+### Added
+- Rest the mouse on a link in a message to see where it really goes (bottom left, like a browser's status bar, also
+  in the installed app). A link whose text shows one website while it leads to another turns the bar orange and asks
+  before opening, on phones too.
+
 ## [1.8.4] - 2026-10-23
 
 ### Fixed

@@ -113,8 +113,26 @@ async function loadConversation() {
 }
 watch(targetKey, loadConversation, { immediate: true })
 
+/**
+ * Mark read only once the message is really on screen: an app that opens in the background (or a tab behind
+ * another) must not mark new mail read that nobody has seen yet.
+ */
+function whenVisible(fn) {
+  if (typeof document === 'undefined' || document.visibilityState === 'visible') return fn()
+  const key = targetKey.value
+  const onShow = () => {
+    if (document.visibilityState !== 'visible') return
+    document.removeEventListener('visibilitychange', onShow)
+    if (targetKey.value === key) fn()
+  }
+  document.addEventListener('visibilitychange', onShow)
+}
+
 function markConversationRead(list) {
   if (!session.settings.mark_read_on_open) return
+  whenVisible(() => markConversationReadNow(list))
+}
+function markConversationReadNow(list) {
   if (summary.value) {
     if (!summary.value.seen) mail.setFlag(summary.value, 'seen', true)
     return
@@ -139,7 +157,10 @@ function onSingleLoaded(data) {
   loaded.value = data
   if (!titleReady.value) subject.value = data.subject
   titleReady.value = true
-  if (!data.seen && session.settings.mark_read_on_open && summary.value) mail.setFlag(summary.value, 'seen', true)
+  if (!data.seen && session.settings.mark_read_on_open && summary.value) {
+    const row = summary.value
+    whenVisible(() => mail.setFlag(row, 'seen', true))
+  }
 }
 
 /** Long conversations: first message, "N earlier messages", then the last two. */

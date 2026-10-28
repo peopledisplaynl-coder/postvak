@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync, rmSync, existsSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
@@ -8,9 +8,29 @@ import { VitePWA } from 'vite-plugin-pwa'
 // The version shown under Settings (and compared with the server's).
 const version = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
 
+/**
+ * The output folder also holds the API (api/, .htaccess), so Vite may not empty it. Remove the previous build's
+ * files ourselves: otherwise old assets pile up and the service worker stores all of them on every device.
+ */
+function cleanPreviousBuild() {
+  const out = new URL('../backend/public/', import.meta.url)
+  const keep = new Set(['api', '.htaccess', 'install.php', 'app-path.php', 'robots.txt'])
+  return {
+    name: 'postvak-clean-previous-build',
+    apply: 'build',
+    buildStart() {
+      if (!existsSync(out)) return
+      for (const name of readdirSync(out)) {
+        if (!keep.has(name)) rmSync(new URL(name, out), { recursive: true, force: true })
+      }
+    },
+  }
+}
+
 export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: [
+    cleanPreviousBuild(),
     vue(),
     tailwindcss(),
     VitePWA({

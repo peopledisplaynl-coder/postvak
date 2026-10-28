@@ -3,6 +3,20 @@
 All notable changes to Postvak. The format follows [Keep a Changelog](https://keepachangelog.com/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.8.6] - 2026-10-28
+
+### Fixed
+- The build no longer keeps the files of earlier builds next to the new ones. They piled up in `backend/public` and
+  the service worker stored all of them on every device (about 26 MB instead of 1.5 MB). Each build now removes the
+  previous build's files first; `api/` and `.htaccess` stay.
+
+## [1.8.6] - 2026-10-28
+
+### Fixed
+- The build no longer keeps the files of earlier builds next to the new ones. They piled up in `backend/public` and
+  the service worker stored all of them on every device (about 26 MB instead of 1.5 MB). Each build now removes the
+  previous build's files first; `api/` and `.htaccess` stay.
+
 ## [1.8.5] - 2026-10-28
 
 ### Fixed
